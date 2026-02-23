@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>積む — Japanese Study</title>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100;200;300;400;500;700&family=Noto+Serif+JP:wght@300;400;600&family=DM+Mono:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+
+  <!-- App styles -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="default">
+<div class="app">
+
+  <!-- ===== HEADER ===== -->
+  <header>
+    <div class="logo">
+      <div>
+        <div>積む</div>
+        <div class="logo-sub">Japanese Study</div>
+      </div>
+    </div>
+    <div class="header-controls">
+      <button class="btn" id="btnToggleFurigana">振仮名 OFF</button>
+      <button class="btn active" id="btnToggleTranslation">Translation ON</button>
+      <button class="btn" id="btnListView">≡ List</button>
+      <button class="btn" id="btnCardView" style="display:none">⊟ Cards</button>
+      <button class="btn" id="btnReviewMode">
+        ⏱ Review
+        <span class="due-badge" id="dueBadge" style="display:none">0</span>
+      </button>
+      <button class="btn" id="btnDeleteMode">✕ Del</button>
+      <button class="btn" id="btnDeckSelect">⊞ Deck</button>
+      <button class="btn btn-accent" id="btnAddSentences">+ Add</button>
+      <!-- Firebase auth -->
+      <span id="userInfo" style="display:none; font-family:'DM Mono',monospace; font-size:0.68rem; color:var(--text3); max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+      <button class="btn" id="btnAuth" onclick="signInWithGoogle()">☁ Sync</button>
+      <!-- Settings gear -->
+      <button class="settings-btn" id="btnSettings" title="Typography settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06
+                   a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09
+                   A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83
+                   l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09
+                   A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83
+                   l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09
+                   a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83
+                   l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09
+                   a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+      <!-- Theme dots -->
+      <div class="theme-dots">
+        <div class="theme-dot active" data-t="default"  title="Violet Dark"></div>
+        <div class="theme-dot"        data-t="midnight" title="Midnight Blue"></div>
+        <div class="theme-dot"        data-t="matcha"   title="Matcha Green"></div>
+        <div class="theme-dot"        data-t="ember"    title="Ember Orange"></div>
+        <div class="theme-dot"        data-t="light"    title="Light"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== MAIN ===== -->
+  <main>
+
+    <!-- Stats bar -->
+    <div class="stats-bar" id="statsBar" style="display:none">
+      <span id="statCard">0 / 0</span>
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill" style="width:0%"></div>
+      </div>
+      <span id="statDue"></span>
+    </div>
+
+    <!-- Length filter bar (shown in card + review mode) -->
+    <div class="length-filter-bar" id="lengthFilterBar" style="display:none">
+      <span class="length-filter-label">Filter:</span>
+      <button class="length-filter-pill" onclick="toggleLengthPill('SHORT')">Short</button>
+      <button class="length-filter-pill" onclick="toggleLengthPill('MEDIUM')">Medium</button>
+      <button class="length-filter-pill" onclick="toggleLengthPill('LONG')">Long</button>
+      <button class="length-filter-pill" onclick="toggleLengthPill('VERY LONG')">Very Long</button>
+      <button class="length-filter-pill length-filter-all" onclick="toggleLengthPill(null)">All</button>
+    </div>
+
+    <!-- Flashcard view -->
+    <div class="flashcard-container" id="flashcardView">
+
+      <!-- Empty state -->
+      <div class="empty-state" id="emptyState">
+        <div class="kanji">無</div>
+        <p>No sentences yet. Add some Japanese sentences to begin studying.</p>
+        <button class="btn btn-accent" onclick="openAddModal()">+ Add Sentences</button>
+      </div>
+
+      <!-- Card area -->
+      <div id="cardArea" style="display:none; width:100%">
+        <div class="card-wrapper">
+          <div class="card" id="mainCard">
+            <div class="card-badge" id="cardBadge">STUDY</div>
+            <div class="card-num"   id="cardNum">1 / 1</div>
+
+            <!-- Japanese sentence + audio button -->
+            <div class="card-sentence-row">
+              <button class="card-audio-btn" id="cardAudioBtn" onclick="speakCard()" title="Play audio">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                  <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+                </svg>
+              </button>
+              <div class="jp-sentence" id="jpText"></div>
+            </div>
+
+            <div class="translation" id="transText"></div>
+            <div class="length-badge" id="lengthBadge"></div>
+          </div>
+        </div>
+
+        <!-- SRS review buttons (shown in review mode) -->
+        <div class="review-btns" id="reviewBtns" style="display:none; margin-top:16px;">
+          <button class="review-btn again" onclick="reviewCard('again')">Again</button>
+          <button class="review-btn hard"  onclick="reviewCard('hard')">Hard</button>
+          <button class="review-btn good"  onclick="reviewCard('good')">Good</button>
+          <button class="review-btn easy"  onclick="reviewCard('easy')">Easy</button>
+        </div>
+
+        <!-- Prev / Next navigation -->
+        <div class="card-nav" id="cardNav">
+          <button class="btn" onclick="prevCard()">← Prev</button>
+          <button class="btn" onclick="nextCard()">Next →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- List view -->
+    <div class="list-view" id="listView"></div>
+
+  </main>
+
+  <!-- ===== ADD SENTENCES MODAL ===== -->
+  <div class="modal-overlay" id="addModal">
+    <div class="modal">
+      <h2>Add Sentences</h2>
+      <div class="modal-sub">PASTE · JAPANESE &amp; ENGLISH · PAIRS</div>
+      <textarea id="sentenceInput" placeholder="Alternate Japanese and English lines:
+
+アメリカに行ったことがない。
+I've never been to America.
+
+ワインは飲んだことがないんだ。
+I've never drunk wine."></textarea>
+      <div class="modal-hint">One Japanese line → one English line. Blank lines between pairs are optional.</div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeAddModal()">Cancel</button>
+        <button class="btn btn-accent" onclick="parseSentences()">Import →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SETTINGS PANEL ===== -->
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-title">⚙ Typography Settings</div>
+
+    <div class="settings-row">
+      <div class="settings-label">
+        Font Size <span id="fontSizeVal">1.9rem</span>
+      </div>
+      <input type="range" id="fontSizeSlider" min="1" max="3.5" step="0.1" value="1.9">
+    </div>
+
+    <div class="settings-row">
+      <div class="settings-label">Font Weight</div>
+      <div class="weight-btns">
+        <button class="weight-btn" data-w="100" onclick="setWeight(this)">Thin</button>
+        <button class="weight-btn" data-w="200" onclick="setWeight(this)">ExLight</button>
+        <button class="weight-btn" data-w="300" onclick="setWeight(this)">Light</button>
+        <button class="weight-btn active" data-w="400" onclick="setWeight(this)">Regular</button>
+        <button class="weight-btn" data-w="500" onclick="setWeight(this)">Medium</button>
+        <button class="weight-btn" data-w="700" onclick="setWeight(this)">Bold</button>
+      </div>
+    </div>
+
+    <div class="settings-row" style="margin-bottom:0">
+      <div class="settings-label">Preview</div>
+      <div style="font-family:'Kikai Chokoku JIS','Noto Sans JP',serif;
+                  font-size:var(--jp-size);
+                  font-weight:var(--jp-weight);
+                  color:var(--text);
+                  padding:8px 0;
+                  line-height:1.6">日本語</div>
+    </div>
+
+    <div class="settings-divider"></div>
+
+    <div class="settings-row" style="margin-bottom:0">
+      <div class="settings-label">Voice</div>
+      <div class="weight-btns" style="flex-direction:column; gap:5px; align-items:stretch;">
+        <button class="speaker-btn weight-btn active" data-sid="ja-JP-Chirp3-HD-Aoede"  onclick="setSpeaker('ja-JP-Chirp3-HD-Aoede')">Aoede — female</button>
+        <button class="speaker-btn weight-btn"        data-sid="ja-JP-Chirp3-HD-Kore"   onclick="setSpeaker('ja-JP-Chirp3-HD-Kore')">Kore — female</button>
+        <button class="speaker-btn weight-btn"        data-sid="ja-JP-Chirp3-HD-Leda"   onclick="setSpeaker('ja-JP-Chirp3-HD-Leda')">Leda — female</button>
+        <button class="speaker-btn weight-btn"        data-sid="ja-JP-Chirp3-HD-Zephyr" onclick="setSpeaker('ja-JP-Chirp3-HD-Zephyr')">Zephyr — female</button>
+        <button class="speaker-btn weight-btn"        data-sid="ja-JP-Chirp3-HD-Charon" onclick="setSpeaker('ja-JP-Chirp3-HD-Charon')">Charon — male</button>
+        <button class="speaker-btn weight-btn"        data-sid="ja-JP-Chirp3-HD-Fenrir" onclick="setSpeaker('ja-JP-Chirp3-HD-Fenrir')">Fenrir — male</button>
+        <button class="speaker-btn weight-btn"        data-sid="ja-JP-Chirp3-HD-Orus"   onclick="setSpeaker('ja-JP-Chirp3-HD-Orus')">Orus — male</button>
+        <button class="speaker-btn weight-btn"        data-sid="ja-JP-Chirp3-HD-Puck"   onclick="setSpeaker('ja-JP-Chirp3-HD-Puck')">Puck — male</button>
+      </div>
+      <div style="font-family:'DM Mono',monospace;font-size:0.62rem;color:var(--text3);margin-top:10px;line-height:1.6;">
+        Powered by <strong style="color:var(--text2)">Google Chirp 3 HD</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== WORD LOOKUP POPUP ===== -->
+  <div class="popup-overlay" id="wordPopup">
+    <div class="popup">
+      <button class="popup-close" onclick="closePopup()">✕</button>
+      <div class="popup-word"          id="popupWord"></div>
+      <div class="popup-reading"       id="popupReading"></div>
+      <div class="popup-meaning"       id="popupMeaning"></div>
+      <div class="popup-examples-title">Example Sentences</div>
+      <div id="popupExamples"></div>
+    </div>
+  </div>
+
+
+  <!-- ===== DECK MODAL ===== -->
+  <div class="modal-overlay" id="deckModal">
+    <div class="modal">
+      <h2>Decks</h2>
+      <div class="modal-sub">SELECT · CREATE · MANAGE</div>
+      <div id="deckList" class="deck-list"></div>
+      <div class="modal-actions" style="margin-top:16px;">
+        <button class="btn" onclick="closeDeckModal()">Close</button>
+        <button class="btn btn-accent" id="btnNewDeck">+ New Deck</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile nav toggle pill — visible only on small screens -->
+  <button id="btnMobileNav" aria-label="Toggle navigation">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+         stroke-linecap="round" width="14" height="14">
+      <line x1="3" y1="6"  x2="21" y2="6"/>
+      <line x1="3" y1="12" x2="21" y2="12"/>
+      <line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+    Nav
+  </button>
+
+</div><!-- /.app -->
+
+<!-- Firebase SDK — must load before firebase.js -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<!-- App logic -->
+<script src="firebase.js"></script>
+<script src="decks.js"></script>
+<script src="tts.js"></script>
+<script src="ui.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
