@@ -102,52 +102,118 @@ function reviewCard(rating) {
   }
 }
 
-// ─── furigana ────────────────────────────────────────────────
-var furiganaMap = {
-  // People & family
-  '私':'わたし','僕':'ぼく','彼':'かれ','彼女':'かのじょ','皆':'みな','父':'ちち','母':'はは',
-  '兄':'あに','姉':'ねえ','弟':'おとうと','妹':'いもうと','子供':'こども','友達':'ともだち','人':'ひと',
-  // Time
-  '今':'いま','今日':'きょう','明日':'あした','昨日':'きのう','毎日':'まいにち','毎年':'まいとし',
-  '今年':'ことし','来年':'らいねん','去年':'きょねん','時間':'じかん','時':'とき','朝':'あさ',
-  '昼':'ひる','夜':'よる','午前':'ごぜん','午後':'ごご','週':'しゅう','月':'つき','年':'ねん',
-  // Places
-  '学校':'がっこう','大学':'だいがく','家':'いえ','部屋':'へや','町':'まち','国':'くに',
-  '日本':'にほん','東京':'とうきょう','外国':'がいこく','海外':'かいがい','会社':'かいしゃ',
-  '店':'みせ','駅':'えき','公園':'こうえん','病院':'びょういん','図書館':'としょかん',
-  // Common verbs (noun forms)
-  '勉強':'べんきょう','仕事':'しごと','電話':'でんわ','食事':'しょくじ','運動':'うんどう',
-  '旅行':'りょこう','買物':'かいもの','料理':'りょうり','掃除':'そうじ','洗濯':'せんたく',
-  // Nature & things
-  '水':'みず','空':'そら','山':'やま','川':'かわ','海':'うみ','花':'はな','木':'き',
-  '魚':'さかな','犬':'いぬ','猫':'ねこ','車':'くるま','電車':'でんしゃ','飛行機':'ひこうき',
-  // Adjectives (noun forms)
-  '好き':'すき','嫌い':'きらい','元気':'げんき','大切':'たいせつ','大丈夫':'だいじょうぶ',
-  '有名':'ゆうめい','大変':'たいへん','暇':'ひま','親切':'しんせつ',
-  // Entertainment & culture
-  '映画':'えいが','音楽':'おんがく','歌':'うた','話':'はなし','本':'ほん','日本語':'にほんご',
-  '英語':'えいご','言葉':'ことば','夢':'ゆめ','気持ち':'きもち',
-  // Other frequent nouns
-  '名前':'なまえ','言葉':'ことば','気':'き','目':'め','手':'て','口':'くち','頭':'あたま',
-  '心':'こころ','声':'こえ','顔':'かお','体':'からだ','足':'あし','食べ物':'たべもの',
-  '飲み物':'のみもの','天気':'てんき','冷蔵庫':'れいぞうこ','自慢':'じまん','遅刻':'ちこく',
-  '退屈':'たいくつ','興味':'きょうみ','廃墟':'はいきょ','屋敷':'やしき','少年':'しょうねん',
-  '王都':'おうと','敷地':'しきち','古書':'こしょ','庭':'にわ','森':'もり','北':'きた'
-};
+// ─── furigana via kuromoji (self-hosted dict) ─────────────────
+// kuromoji@0.1.2 browser build + dict files hosted in /dict/ folder.
+// This is the ONLY approach that reliably works in plain HTML on GitHub Pages.
+// Dict files must be present at ./dict/ — see README for setup instructions.
+//
+// How it works:
+//  1. kuromoji.js is loaded as a <script> tag (exposes window.kuromoji)
+//  2. On page load, kuromoji reads the dict files from ./dict/
+//  3. Once ready (~1-2s), all sentences are pre-tokenized and cached in localStorage
+//  4. Furigana is synchronous after that — instant on every render
+
+var kuromojiTokenizer = null;
+var kuromojiReady     = false;
+
+// localStorage cache: full Japanese sentence → ruby HTML string
+// Each sentence processed once, then instant forever.
+var furiganaCache = {};
+
+function loadFuriganaCache() {
+  try {
+    var raw = localStorage.getItem('jpStudy_furigana_cache');
+    if (raw) furiganaCache = JSON.parse(raw);
+  } catch(e) { furiganaCache = {}; }
+}
+
+function saveFuriganaCache() {
+  try { localStorage.setItem('jpStudy_furigana_cache', JSON.stringify(furiganaCache)); } catch(e) {}
+}
+
+function initKuromoji() {
+  if (typeof kuromoji === 'undefined') {
+    console.warn('kuromoji.js not loaded — check that kuromoji.js is in your project');
+    return;
+  }
+  kuromoji.builder({ dicPath: './dict' }).build(function(err, tokenizer) {
+    if (err) {
+      console.warn('kuromoji dict load failed:', err);
+      return;
+    }
+    kuromojiTokenizer = tokenizer;
+    kuromojiReady     = true;
+    // Pre-convert all sentences now while user isn't waiting
+    prefetchAllFurigana();
+    // If furigana toggle is ON, re-render so readings appear immediately
+    if (showFurigana) render();
+  });
+}
+
+// Convert katakana → hiragana (kuromoji readings are katakana)
+function kata2hira(str) {
+  return str.replace(/[\u30A1-\u30F6]/g, function(ch) {
+    return String.fromCharCode(ch.charCodeAt(0) - 0x60);
+  });
+}
+
+// Build ruby HTML from kuromoji token array.
+// Only adds <ruby> to tokens that contain kanji AND have a reading.
+function buildRubyHTML(tokens) {
+  return tokens.map(function(token) {
+    var surface = token.surface_form;
+    var reading = token.reading;
+    if (!reading || !/[一-龯]/.test(surface)) return surface;
+    var hira = kata2hira(reading);
+    if (hira === surface) return surface; // already kana, skip
+    return '<ruby>' + surface + '<rt>' + hira + '</rt></ruby>';
+  }).join('');
+}
+
+// Convert one sentence to furigana HTML. Synchronous — uses cache.
+// Returns null if tokenizer not ready yet (caller handles gracefully).
+function toFuriganaHTML(text) {
+  if (furiganaCache.hasOwnProperty(text)) return furiganaCache[text];
+  if (!kuromojiReady) return null;
+  var html = buildRubyHTML(kuromojiTokenizer.tokenize(text));
+  furiganaCache[text] = html;
+  return html;
+}
+
+// Pre-convert every sentence in the background after tokenizer is ready.
+function prefetchAllFurigana() {
+  if (!kuromojiReady) return;
+  var changed = false;
+  sentences.forEach(function(s) {
+    if (!furiganaCache.hasOwnProperty(s.jp)) {
+      furiganaCache[s.jp] = buildRubyHTML(kuromojiTokenizer.tokenize(s.jp));
+      changed = true;
+    }
+  });
+  if (changed) saveFuriganaCache();
+}
 
 function buildClickableJP(text) {
+  if (showFurigana) {
+    var html = toFuriganaHTML(text);
+    if (html !== null) {
+      // Furigana ready — wrap whole sentence for click-to-lookup
+      return '<span class="jp-word jp-sentence" data-word="' +
+        text.replace(/"/g, '&quot;') + '" onclick="lookupWord(this)">' + html + '</span>';
+    }
+    // Tokenizer still loading — show plain text, will re-render when ready
+    return '<span class="jp-word jp-sentence" data-word="' +
+      text.replace(/"/g, '&quot;') + '" onclick="lookupWord(this)">' + text + '</span>';
+  }
+
+  // Furigana OFF — split into individual clickable word spans
   var re = /([一-龯々ヵヶ]+(?:[ぁ-ん]*)|[ぁ-ん]+|[ァ-ヶー]+|[a-zA-Z0-9]+|[^\s])/g;
   var match, result = '';
   while ((match = re.exec(text)) !== null) {
     var t = match[0];
     if (/[一-龯ぁ-んァ-ヶ]/.test(t)) {
-      var inner = t;
-      if (showFurigana) {
-        Object.keys(furiganaMap).forEach(function(kanji) {
-          inner = inner.replace(new RegExp(kanji, 'g'), '<ruby>' + kanji + '<rt>' + furiganaMap[kanji] + '</rt></ruby>');
-        });
-      }
-      result += '<span class="jp-word" data-word="' + t.replace(/"/g, '&quot;') + '" onclick="lookupWord(this)">' + inner + '</span>';
+      result += '<span class="jp-word" data-word="' +
+        t.replace(/"/g, '&quot;') + '" onclick="lookupWord(this)">' + t + '</span>';
     } else {
       result += t;
     }
@@ -155,99 +221,27 @@ function buildClickableJP(text) {
   return result;
 }
 
-// ─── mini dictionary ─────────────────────────────────────────
-var miniDict = {
-  'こと':   { reading: 'こと',        meaning: 'thing; matter; fact; case; circumstance' },
-  'ない':   { reading: 'ない',        meaning: 'nonexistent; not (verb negation)' },
-  '私':     { reading: 'わたし',     meaning: 'I; me (formal)' },
-  '僕':     { reading: 'ぼく',       meaning: 'I; me (masculine)' },
-  '彼':     { reading: 'かれ',       meaning: 'he; him; boyfriend' },
-  '彼女':   { reading: 'かのじょ',   meaning: 'she; her; girlfriend' },
-  '人':     { reading: 'ひと',       meaning: 'person; people; human' },
-  '子供':   { reading: 'こども',     meaning: 'child; children' },
-  '友達':   { reading: 'ともだち',   meaning: 'friend; companion' },
-  '父':     { reading: 'ちち',       meaning: 'father (humble)' },
-  '母':     { reading: 'はは',       meaning: 'mother (humble)' },
-  '今':     { reading: 'いま',       meaning: 'now; at the moment' },
-  '今日':   { reading: 'きょう',     meaning: 'today; this day' },
-  '明日':   { reading: 'あした',     meaning: 'tomorrow' },
-  '昨日':   { reading: 'きのう',     meaning: 'yesterday' },
-  '毎日':   { reading: 'まいにち',   meaning: 'every day; daily' },
-  '時間':   { reading: 'じかん',     meaning: 'time; hours' },
-  '朝':     { reading: 'あさ',       meaning: 'morning' },
-  '昼':     { reading: 'ひる',       meaning: 'noon; daytime' },
-  '夜':     { reading: 'よる',       meaning: 'night; evening' },
-  '学校':   { reading: 'がっこう',   meaning: 'school' },
-  '大学':   { reading: 'だいがく',   meaning: 'university; college' },
-  '家':     { reading: 'いえ',       meaning: 'house; home; family' },
-  '部屋':   { reading: 'へや',       meaning: 'room' },
-  '町':     { reading: 'まち',       meaning: 'town; city; street' },
-  '国':     { reading: 'くに',       meaning: 'country; nation; homeland' },
-  '日本':   { reading: 'にほん',     meaning: 'Japan' },
-  '会社':   { reading: 'かいしゃ',   meaning: 'company; workplace' },
-  '駅':     { reading: 'えき',       meaning: 'station (train/subway)' },
-  '病院':   { reading: 'びょういん', meaning: 'hospital' },
-  '勉強':   { reading: 'べんきょう', meaning: 'study; learning; diligence' },
-  '仕事':   { reading: 'しごと',     meaning: 'work; job; occupation' },
-  '電話':   { reading: 'でんわ',     meaning: 'telephone; phone call' },
-  '旅行':   { reading: 'りょこう',   meaning: 'travel; trip; journey' },
-  '料理':   { reading: 'りょうり',   meaning: 'cooking; cuisine; dish' },
-  '水':     { reading: 'みず',       meaning: 'water' },
-  '空':     { reading: 'そら',       meaning: 'sky; air' },
-  '山':     { reading: 'やま',       meaning: 'mountain; hill' },
-  '川':     { reading: 'かわ',       meaning: 'river; stream' },
-  '海':     { reading: 'うみ',       meaning: 'sea; ocean; beach' },
-  '花':     { reading: 'はな',       meaning: 'flower; blossom; petal; bloom' },
-  '木':     { reading: 'き',         meaning: 'tree; wood' },
-  '魚':     { reading: 'さかな',     meaning: 'fish; fish as food' },
-  '犬':     { reading: 'いぬ',       meaning: 'dog' },
-  '猫':     { reading: 'ねこ',       meaning: 'cat' },
-  '車':     { reading: 'くるま',     meaning: 'car; vehicle' },
-  '電車':   { reading: 'でんしゃ',   meaning: 'train; electric train' },
-  '飛行機': { reading: 'ひこうき',   meaning: 'airplane; aircraft' },
-  '好き':   { reading: 'すき',       meaning: 'liked; favourite; in love with' },
-  '嫌い':   { reading: 'きらい',     meaning: 'disliked; hated' },
-  '元気':   { reading: 'げんき',     meaning: 'healthy; energetic; lively' },
-  '大切':   { reading: 'たいせつ',   meaning: 'important; precious; valuable' },
-  '大丈夫': { reading: 'だいじょうぶ', meaning: "all right; okay; no problem" },
-  '映画':   { reading: 'えいが',     meaning: 'movie; film; cinema' },
-  '音楽':   { reading: 'おんがく',   meaning: 'music' },
-  '歌':     { reading: 'うた',       meaning: 'song; singing; poem' },
-  '話':     { reading: 'はなし',     meaning: 'talk; speech; conversation; story' },
-  '本':     { reading: 'ほん',       meaning: 'book; volume' },
-  '日本語': { reading: 'にほんご',   meaning: 'Japanese language' },
-  '英語':   { reading: 'えいご',     meaning: 'English language' },
-  '夢':     { reading: 'ゆめ',       meaning: 'dream; vision; ambition' },
-  '気持ち': { reading: 'きもち',     meaning: 'feeling; mood; sensation' },
-  '名前':   { reading: 'なまえ',     meaning: 'name; full name' },
-  '心':     { reading: 'こころ',     meaning: 'heart; mind; spirit; feeling' },
-  '声':     { reading: 'こえ',       meaning: 'voice; sound' },
-  '顔':     { reading: 'かお',       meaning: 'face; look; expression' },
-  '体':     { reading: 'からだ',     meaning: 'body; health' },
-  '外国':   { reading: 'がいこく',   meaning: 'foreign country; abroad' },
-  '天気':   { reading: 'てんき',     meaning: 'weather; the elements' },
-  '退屈':   { reading: 'たいくつ',   meaning: 'boredom; tedium; dull' },
-  '興味':   { reading: 'きょうみ',   meaning: 'interest; curiosity' },
-  '少年':   { reading: 'しょうねん', meaning: 'boy; juvenile; young man' },
-  '王都':   { reading: 'おうと',     meaning: 'royal capital; capital city' },
-  '庭':     { reading: 'にわ',       meaning: 'garden; yard' },
-  '森':     { reading: 'もり',       meaning: 'forest; woods' },
-  '北':     { reading: 'きた',       meaning: 'north' },
-  '行':     { reading: 'い(く)',     meaning: 'to go; to move toward; to proceed' },
-  '見':     { reading: 'み(る)',     meaning: 'to see; to look; to watch; to observe' },
-  '食':     { reading: 'た(べる)',   meaning: 'to eat; to consume' },
-  '聞':     { reading: 'き(く)',     meaning: 'to listen; to hear; to ask' }
-};
-
+// ─── word lookup popup ───────────────────────────────────────
 function lookupWord(el) {
   document.querySelectorAll('.jp-word.selected').forEach(function(e) { e.classList.remove('selected'); });
   el.classList.add('selected');
   var word = el.dataset.word;
-  var info = miniDict[word];
-  document.getElementById('popupWord').textContent    = word;
-  document.getElementById('popupReading').textContent = info ? info.reading : '—';
-  document.getElementById('popupMeaning').textContent = info ? info.meaning : 'Meaning not in local dictionary. Try jpdb.io or jisho.org!';
 
+  document.getElementById('popupWord').textContent    = word;
+  document.getElementById('popupMeaning').textContent = 'Open jisho.org for meaning →';
+
+  // Get reading via kuromoji if ready
+  if (kuromojiReady) {
+    var tokens  = kuromojiTokenizer.tokenize(word);
+    var reading = tokens.map(function(t) {
+      return t.reading ? kata2hira(t.reading) : t.surface_form;
+    }).join('');
+    document.getElementById('popupReading').textContent = reading || '—';
+  } else {
+    document.getElementById('popupReading').textContent = '—';
+  }
+
+  // Examples from user's own sentences
   var examples = sentences.filter(function(s) { return s.jp.indexOf(word) !== -1; }).slice(0, 3);
   document.getElementById('popupExamples').innerHTML = examples.length
     ? examples.map(function(ex) {
@@ -491,15 +485,20 @@ function nextCard() {
 }
 
 // ─── init ────────────────────────────────────────────────────
-initDecks();     // decks.js  — loads deck data into globals (sentences, srsData, currentIdx)
-loadUIPrefs();   // ui.js     — restores theme, font, toggles, and sets isListView
-loadVoicePref(); // tts.js    — restores selected voice
-updateDeckUI();  // decks.js  — sets deck button label + modal content
-applyViewState();// ui.js     — syncs DOM to isListView/isReviewMode flags
+initDecks();         // decks.js  — loads deck data into globals (sentences, srsData, currentIdx)
+loadUIPrefs();       // ui.js     — restores theme, font, toggles, and sets isListView
+loadVoicePref();     // tts.js    — restores selected voice
+loadFuriganaCache(); // load cached furigana readings from localStorage
+updateDeckUI();      // decks.js  — sets deck button label + modal content
+applyViewState();    // ui.js     — syncs DOM to isListView/isReviewMode flags
 
 if (window.speechSynthesis) { speechSynthesis.onvoiceschanged = function() {}; speechSynthesis.getVoices(); }
 
 render();
+
+// Init kuromoji after first render — loads dict files from ./dict/ (~1-2s first time)
+// When ready: pre-tokenizes all sentences, then re-renders if furigana is ON
+initKuromoji();
 
 // Firebase: init last so page renders instantly from localStorage,
 // then cloud data overwrites if user is signed in.
