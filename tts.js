@@ -105,14 +105,17 @@ function speakJP(text) {
 
 function stopAudio() {
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  pausedAudio = null;
 }
 
 // SVG icon strings — inline play ▶ and pause ⏸
 var ICON_PLAY  = '<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15" style="vertical-align:middle;margin-right:4px"><path d="M8 5v14l11-7z"/></svg>Play';
 var ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15" style="vertical-align:middle;margin-right:4px"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>Pause';
 
+// Holds the paused Audio object so we can resume it (not restart from scratch).
+var pausedAudio = null;
+
 function speakCard() {
-  // In card mode, sentences are filtered — must use same source as renderCard
   var src = isReviewMode ? reviewQueue : getSentencesForFilter();
   var idx = isReviewMode ? reviewIdx  : currentIdx;
   var s   = src[idx];
@@ -120,13 +123,34 @@ function speakCard() {
 
   var btn = document.getElementById('cardAudioBtn');
 
+  // ── PAUSE branch ─────────────────────────────────────────────
   if (isSpeaking) {
-    stopAudio();
+    if (currentAudio) {
+      currentAudio.pause();
+      pausedAudio = currentAudio; // remember it so we can resume
+      currentAudio = null;
+    }
     isSpeaking = false;
     if (btn) { btn.innerHTML = ICON_PLAY; btn.classList.remove('playing'); }
     return;
   }
 
+  // ── RESUME branch (audio was paused, not ended) ───────────────
+  if (pausedAudio) {
+    currentAudio = pausedAudio;
+    pausedAudio  = null;
+    isSpeaking   = true;
+    if (btn) { btn.innerHTML = ICON_PAUSE; btn.classList.add('playing'); }
+    currentAudio.play().catch(function(err) {
+      console.error('Resume failed:', err);
+      currentAudio = null;
+      isSpeaking   = false;
+      if (btn) { btn.innerHTML = ICON_PLAY; btn.classList.remove('playing'); }
+    });
+    return;
+  }
+
+  // ── PLAY branch (fresh start) ─────────────────────────────────
   isSpeaking = true;
   if (btn) { btn.innerHTML = ICON_PAUSE; btn.classList.add('playing'); }
 
@@ -136,14 +160,16 @@ function speakCard() {
       alert('Audio failed. Check your API key or internet connection.');
     })
     .then(function() {
-      isSpeaking = false;
+      isSpeaking  = false;
+      pausedAudio = null;
       if (btn) { btn.innerHTML = ICON_PLAY; btn.classList.remove('playing'); }
     });
 }
 
 function resetAudioBtn() {
-  stopAudio();
-  isSpeaking = false;
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  pausedAudio = null;
+  isSpeaking  = false;
   var btn = document.getElementById('cardAudioBtn');
   if (btn) { btn.innerHTML = ICON_PLAY; btn.classList.remove('playing'); }
 }
