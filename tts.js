@@ -107,6 +107,10 @@ function stopAudio() {
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
 }
 
+// SVG icon strings — inline play ▶ and pause ⏸
+var ICON_PLAY  = '<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15" style="vertical-align:middle;margin-right:4px"><path d="M8 5v14l11-7z"/></svg>Play';
+var ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15" style="vertical-align:middle;margin-right:4px"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>Pause';
+
 function speakCard() {
   // In card mode, sentences are filtered — must use same source as renderCard
   var src = isReviewMode ? reviewQueue : getSentencesForFilter();
@@ -119,12 +123,12 @@ function speakCard() {
   if (isSpeaking) {
     stopAudio();
     isSpeaking = false;
-    if (btn) { btn.textContent = '▶ Play'; btn.classList.remove('playing'); }
+    if (btn) { btn.innerHTML = ICON_PLAY; btn.classList.remove('playing'); }
     return;
   }
 
   isSpeaking = true;
-  if (btn) { btn.textContent = '⏸ Pause'; btn.classList.add('playing'); }
+  if (btn) { btn.innerHTML = ICON_PAUSE; btn.classList.add('playing'); }
 
   speakJP(s.jp)
     .catch(function(err) {
@@ -133,7 +137,7 @@ function speakCard() {
     })
     .then(function() {
       isSpeaking = false;
-      if (btn) { btn.textContent = '▶ Play'; btn.classList.remove('playing'); }
+      if (btn) { btn.innerHTML = ICON_PLAY; btn.classList.remove('playing'); }
     });
 }
 
@@ -141,7 +145,7 @@ function resetAudioBtn() {
   stopAudio();
   isSpeaking = false;
   var btn = document.getElementById('cardAudioBtn');
-  if (btn) { btn.textContent = '▶ Play'; btn.classList.remove('playing'); }
+  if (btn) { btn.innerHTML = ICON_PLAY; btn.classList.remove('playing'); }
 }
 
 function setSpeaker(voiceName) {

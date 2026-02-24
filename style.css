@@ -939,8 +939,8 @@ input[type=range]::-moz-range-thumb {
   header              { padding: 14px 16px; }
   main                { padding: 20px 16px; }
   .card               { padding: 12px 12px 16px; min-height: 440px; }
-  /* Mobile: image 90% wide, height stays proportional */
-  .card-image         { width: 90%; height: 300px; }
+  /* Mobile: image 90% wide, 80% of 440px card height = 352px */
+  .card-image         { width: 90%; height: 352px; }
   .card-jp-area       { padding: 12px 10px 10px; }
   .card-en-area       { padding: 8px 10px 4px; }
   /* DO NOT override --jp-size here — let the settings slider control it */
