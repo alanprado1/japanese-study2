@@ -132,6 +132,16 @@ function saveFuriganaCache() {
   try { localStorage.setItem('jpStudy_furigana_cache', JSON.stringify(furiganaCache)); } catch(e) {}
 }
 
+// Debounced save — coalesces rapid successive calls into one write.
+// When switching to list view with 100+ sentences, buildJPHTML is called
+// for every sentence. Without debouncing this causes 100+ synchronous
+// localStorage.setItem calls, each serialising the whole cache = O(n²) freeze.
+var _saveFuriganaTimer = null;
+function saveFuriganaCacheDebounced() {
+  if (_saveFuriganaTimer) clearTimeout(_saveFuriganaTimer);
+  _saveFuriganaTimer = setTimeout(saveFuriganaCache, 800);
+}
+
 function katakanaToHiragana(str) {
   return str.replace(/[\u30a1-\u30f6]/g, function(m) { return String.fromCharCode(m.charCodeAt(0) - 0x60); });
 }
@@ -258,7 +268,7 @@ function buildJPHTML(text) {
   }
 
   furiganaCache[cacheKey] = html;
-  saveFuriganaCache();
+  saveFuriganaCacheDebounced();
   return html;
 }
 
