@@ -103,6 +103,28 @@
             <div class="card-badge" id="cardBadge">STUDY</div>
             <div class="card-num"   id="cardNum">1 / 1</div>
 
+            <!-- Sentence illustration (placeholder until image loads) -->
+            <div class="card-image" id="cardImage">
+              <div class="card-image-placeholder">
+                <svg viewBox="0 0 80 52" fill="none" xmlns="http://www.w3.org/2000/svg" width="80" height="52" opacity="0.35">
+                  <!-- Sky -->
+                  <rect width="80" height="52" rx="6" fill="none"/>
+                  <!-- Mountains -->
+                  <polygon points="0,52 18,24 36,52" fill="currentColor" opacity="0.3"/>
+                  <polygon points="22,52 42,18 62,52" fill="currentColor" opacity="0.5"/>
+                  <polygon points="44,52 64,28 80,52" fill="currentColor" opacity="0.3"/>
+                  <!-- Moon -->
+                  <circle cx="62" cy="14" r="7" fill="currentColor" opacity="0.4"/>
+                  <!-- Stars -->
+                  <circle cx="20" cy="10" r="1" fill="currentColor" opacity="0.5"/>
+                  <circle cx="34" cy="6"  r="1" fill="currentColor" opacity="0.4"/>
+                  <circle cx="50" cy="9"  r="1" fill="currentColor" opacity="0.5"/>
+                  <circle cx="12" cy="18" r="1" fill="currentColor" opacity="0.3"/>
+                </svg>
+                <span>絵</span>
+              </div>
+            </div>
+
             <!-- Japanese sentence + audio button -->
             <div class="card-sentence-row">
               <button class="card-audio-btn" id="cardAudioBtn" onclick="speakCard()" title="Play audio">
@@ -262,6 +284,7 @@ I've never drunk wine."></textarea>
 <script src="decks.js"></script>
 <script src="tts.js"></script>
 <script src="ui.js"></script>
+<script src="images.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -367,6 +367,9 @@ function renderCard() {
 
   updateDueBadge();
 
+  // Update card image (placeholder for now; Phase 2 will load real images)
+  if (typeof updateCardImage === 'function') updateCardImage(s);
+
   // Prefetch next card's audio
   if (typeof prefetchJP === 'function') {
     var nextSrc  = src[isReviewMode ? reviewIdx + 1 : currentIdx + 1];

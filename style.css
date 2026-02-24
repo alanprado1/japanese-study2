@@ -399,6 +399,78 @@ main {
 /* ===== CARD NAV ===== */
 .card-nav { display: flex; gap: 12px; align-items: center; }
 
+/* ===== CARD IMAGE ===== */
+.card-image {
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* The actual <img> once loaded — hidden until src is set */
+.card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 12px;
+  transition: opacity 0.4s ease;
+}
+
+/* Placeholder shown before image loads */
+.card-image-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text3);
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.card-image-placeholder span {
+  font-family: 'Noto Sans JP', serif;
+  font-size: 1.1rem;
+  letter-spacing: 0.1em;
+  opacity: 0.4;
+}
+
+/* Shimmer animation on placeholder */
+.card-image-placeholder::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,0.03) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: card-image-shimmer 2.4s ease-in-out infinite;
+}
+
+@keyframes card-image-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+/* Hide placeholder once image is loaded */
+.card-image.loaded .card-image-placeholder {
+  display: none;
+}
+
 /* ===== REVIEW BUTTONS ===== */
 .review-btns {
   display: flex;
