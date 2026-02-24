@@ -103,17 +103,29 @@ function speakJP(text) {
   });
 }
 
-function stopAudio() {
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  pausedAudio = null;
-}
-
-// SVG icon strings — inline play ▶ and pause ⏸
+// SVG icons
 var ICON_PLAY  = '<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15" style="vertical-align:middle;margin-right:4px"><path d="M8 5v14l11-7z"/></svg>Play';
 var ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15" style="vertical-align:middle;margin-right:4px"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>Pause';
 
-// Holds the paused Audio object so we can resume it (not restart from scratch).
+// pausedAudio holds the paused Audio object so Play resumes rather than restarts.
+// playToken is incremented whenever audio is stopped/paused/navigated away, so
+// any in-flight fetch knows it has been cancelled and must not start playback.
 var pausedAudio = null;
+var playToken   = 0;
+
+function _setBtn(icon) {
+  var btn = document.getElementById('cardAudioBtn');
+  if (!btn) return;
+  btn.innerHTML = icon;
+  btn.classList.toggle('playing', icon === ICON_PAUSE);
+}
+
+function stopAudio() {
+  playToken++;
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  pausedAudio = null;
+  isSpeaking  = false;
+}
 
 function speakCard() {
   var src = isReviewMode ? reviewQueue : getSentencesForFilter();
@@ -121,57 +133,110 @@ function speakCard() {
   var s   = src[idx];
   if (!s) return;
 
-  var btn = document.getElementById('cardAudioBtn');
-
-  // ── PAUSE branch ─────────────────────────────────────────────
+  // ── PAUSE ──────────────────────────────────────────────────────
   if (isSpeaking) {
+    playToken++;                           // cancel any in-flight fetch
     if (currentAudio) {
       currentAudio.pause();
-      pausedAudio = currentAudio; // remember it so we can resume
+      pausedAudio  = currentAudio;        // save reference for resume
       currentAudio = null;
     }
     isSpeaking = false;
-    if (btn) { btn.innerHTML = ICON_PLAY; btn.classList.remove('playing'); }
+    _setBtn(ICON_PLAY);
     return;
   }
 
-  // ── RESUME branch (audio was paused, not ended) ───────────────
+  // ── RESUME ─────────────────────────────────────────────────────
   if (pausedAudio) {
-    currentAudio = pausedAudio;
+    var resuming = pausedAudio;
     pausedAudio  = null;
+    currentAudio = resuming;
     isSpeaking   = true;
-    if (btn) { btn.innerHTML = ICON_PAUSE; btn.classList.add('playing'); }
-    currentAudio.play().catch(function(err) {
-      console.error('Resume failed:', err);
+    _setBtn(ICON_PAUSE);
+    resuming.play().catch(function() {
       currentAudio = null;
       isSpeaking   = false;
-      if (btn) { btn.innerHTML = ICON_PLAY; btn.classList.remove('playing'); }
+      _setBtn(ICON_PLAY);
     });
     return;
   }
 
-  // ── PLAY branch (fresh start) ─────────────────────────────────
-  isSpeaking = true;
-  if (btn) { btn.innerHTML = ICON_PAUSE; btn.classList.add('playing'); }
+  // ── FRESH PLAY ─────────────────────────────────────────────────
+  isSpeaking    = true;
+  var token     = ++playToken;            // snapshot: if it changes, we were cancelled
+  _setBtn(ICON_PAUSE);
 
-  speakJP(s.jp)
-    .catch(function(err) {
-      console.error('TTS error:', err);
-      alert('Audio failed. Check your API key or internet connection.');
-    })
-    .then(function() {
+  var key    = selectedVoice + '|' + s.jp;
+  var cached = cacheGet(key);
+
+  function startPlay(b64) {
+    if (token !== playToken) return;      // paused/navigated before audio was ready
+
+    var audio = new Audio();
+    audio.preload = 'auto';
+    currentAudio  = audio;
+
+    audio.onended = function() {
+      if (currentAudio === audio) { currentAudio = null; }
       isSpeaking  = false;
       pausedAudio = null;
-      if (btn) { btn.innerHTML = ICON_PLAY; btn.classList.remove('playing'); }
-    });
+      _setBtn(ICON_PLAY);
+    };
+    audio.onerror = function() {
+      if (currentAudio === audio) { currentAudio = null; }
+      isSpeaking = false;
+      _setBtn(ICON_PLAY);
+    };
+    audio.oncanplaythrough = function() {
+      setTimeout(function() {
+        if (currentAudio === audio && token === playToken) {
+          audio.play().catch(function() {
+            currentAudio = null;
+            isSpeaking   = false;
+            _setBtn(ICON_PLAY);
+          });
+        }
+      }, 80);
+    };
+    audio.src = 'data:audio/mp3;base64,' + b64;
+    audio.load();
+  }
+
+  if (cached) {
+    startPlay(cached);
+    return;
+  }
+
+  fetch(GOOGLE_TTS_URL, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      input:       { text: s.jp },
+      voice:       { languageCode: 'ja-JP', name: selectedVoice },
+      audioConfig: { audioEncoding: 'MP3' }
+    })
+  })
+  .then(function(res) {
+    if (!res.ok) throw new Error('TTS HTTP ' + res.status);
+    return res.json();
+  })
+  .then(function(data) {
+    if (!data.audioContent) throw new Error('No audioContent');
+    cacheSet(key, data.audioContent);
+    startPlay(data.audioContent);
+  })
+  .catch(function(err) {
+    if (token !== playToken) return;      // was cancelled, ignore silently
+    console.error('TTS error:', err);
+    isSpeaking = false;
+    _setBtn(ICON_PLAY);
+    alert('Audio failed. Check your API key or internet connection.');
+  });
 }
 
 function resetAudioBtn() {
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  pausedAudio = null;
-  isSpeaking  = false;
-  var btn = document.getElementById('cardAudioBtn');
-  if (btn) { btn.innerHTML = ICON_PLAY; btn.classList.remove('playing'); }
+  stopAudio();
+  _setBtn(ICON_PLAY);
 }
 
 function setSpeaker(voiceName) {
