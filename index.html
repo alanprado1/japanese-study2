@@ -101,15 +101,13 @@
         <div class="card-wrapper">
           <div class="card" id="mainCard">
 
-            <!-- Sentence illustration with JP on top, translation on bottom -->
+            <!-- Japanese sentence — sits above the image, room for furigana -->
+            <div class="card-jp-area">
+              <div class="jp-sentence" id="jpText"></div>
+            </div>
+
+            <!-- Illustration placeholder (Phase 2: real AI image) -->
             <div class="card-image" id="cardImage">
-
-              <!-- JP sentence overlaid at the top of the image -->
-              <div class="card-image-top">
-                <div class="jp-sentence" id="jpText"></div>
-              </div>
-
-              <!-- Placeholder shown until a real image is available -->
               <div class="card-image-placeholder">
                 <svg viewBox="0 0 80 52" fill="none" xmlns="http://www.w3.org/2000/svg" width="80" height="52" opacity="0.35">
                   <polygon points="0,52 18,24 36,52" fill="currentColor" opacity="0.3"/>
@@ -123,12 +121,11 @@
                 </svg>
                 <span>絵</span>
               </div>
+            </div>
 
-              <!-- Translation overlaid at the bottom of the image -->
-              <div class="card-image-bottom">
-                <div class="translation" id="transText"></div>
-              </div>
-
+            <!-- English translation — sits below the image -->
+            <div class="card-en-area">
+              <div class="translation" id="transText"></div>
             </div>
 
           </div>
@@ -142,19 +139,10 @@
           <button class="review-btn easy"  onclick="reviewCard('easy')">Easy</button>
         </div>
 
-        <!-- Prev / Audio / Next navigation -->
+        <!-- Prev / Play / Next navigation -->
         <div class="card-nav" id="cardNav">
           <button class="btn" onclick="prevCard()">← Prev</button>
-          <button class="card-audio-btn" id="cardAudioBtn" onclick="speakCard()" title="Play / Pause audio">
-            <!-- Play icon (default) -->
-            <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-              <path d="M8 5v14l11-7z"/>
-            </svg>
-            <!-- Pause icon (shown when .playing) -->
-            <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-            </svg>
-          </button>
+          <button class="card-audio-btn" id="cardAudioBtn" onclick="speakCard()">▶ Play</button>
           <button class="btn" onclick="nextCard()">Next →</button>
         </div>
       </div>

@@ -119,12 +119,12 @@ function speakCard() {
   if (isSpeaking) {
     stopAudio();
     isSpeaking = false;
-    if (btn) btn.classList.remove('playing');
+    if (btn) { btn.textContent = '▶ Play'; btn.classList.remove('playing'); }
     return;
   }
 
   isSpeaking = true;
-  if (btn) btn.classList.add('playing');
+  if (btn) { btn.textContent = '⏸ Pause'; btn.classList.add('playing'); }
 
   speakJP(s.jp)
     .catch(function(err) {
@@ -133,7 +133,7 @@ function speakCard() {
     })
     .then(function() {
       isSpeaking = false;
-      if (btn) btn.classList.remove('playing');
+      if (btn) { btn.textContent = '▶ Play'; btn.classList.remove('playing'); }
     });
 }
 
@@ -141,7 +141,7 @@ function resetAudioBtn() {
   stopAudio();
   isSpeaking = false;
   var btn = document.getElementById('cardAudioBtn');
-  if (btn) btn.classList.remove('playing');
+  if (btn) { btn.textContent = '▶ Play'; btn.classList.remove('playing'); }
 }
 
 function setSpeaker(voiceName) {
