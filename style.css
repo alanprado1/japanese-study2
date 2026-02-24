@@ -270,69 +270,26 @@ main {
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: 20px;
-  padding: 48px 48px 40px;
+  padding: 20px 24px 24px;
   box-shadow: var(--card-shadow);
   position: relative;
-  min-height: 280px;
+  min-height: 320px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  align-items: center;
-  gap: 20px;
+  align-items: stretch;
+  gap: 0;
   text-align: center;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   animation: fadeSlide 0.35s ease;
 }
 .card:hover { transform: translateY(-2px); box-shadow: 0 16px 60px rgba(0, 0, 0, 0.55); }
 
-.card-badge {
-  position: absolute;
-  top: 20px;
-  left: 24px;
-  font-size: 0.65rem;
-  letter-spacing: 0.14em;
-  color: var(--text3);
-  font-family: 'DM Mono', monospace;
-  text-transform: uppercase;
-}
-
-.card-num {
-  position: absolute;
-  top: 20px;
-  right: 24px;
-  font-size: 0.65rem;
-  color: var(--text3);
-  font-family: 'DM Mono', monospace;
-}
-
-.length-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.6rem;
-  padding: 3px 8px;
-  border-radius: 20px;
-  border: 1px solid var(--border);
-  color: var(--text3);
-  font-family: 'DM Mono', monospace;
-  letter-spacing: 0.1em;
-  position: absolute;
-  bottom: 20px;
-  left: 24px;
-}
-
 /* ===== CARD AUDIO BUTTON ===== */
-.card-sentence-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  justify-content: center;
-}
-
 .card-audio-btn {
   flex-shrink: 0;
-  width: 38px;
-  height: 38px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--bg3);
@@ -343,7 +300,14 @@ main {
   justify-content: center;
   transition: all 0.2s;
   font-size: 1rem;
+  position: relative;
 }
+
+/* Show play icon by default, pause icon when .playing */
+.card-audio-btn .icon-play  { display: block; }
+.card-audio-btn .icon-pause { display: none;  }
+.card-audio-btn.playing .icon-play  { display: none;  }
+.card-audio-btn.playing .icon-pause { display: block; }
 .card-audio-btn:hover {
   border-color: var(--accent);
   color: var(--accent);
@@ -397,7 +361,12 @@ main {
 .translation.hidden { opacity: 0; filter: blur(6px); pointer-events: none; }
 
 /* ===== CARD NAV ===== */
-.card-nav { display: flex; gap: 12px; align-items: center; }
+.card-nav {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+}
 
 /* ===== CARD IMAGE ===== */
 .card-image {
@@ -407,14 +376,13 @@ main {
   position: relative;
   background: var(--bg3);
   border: 1px solid var(--border);
-  height: 180px;
+  height: 234px;          /* 180px × 1.3 */
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-/* The actual <img> once loaded — hidden until src is set */
 .card-image img {
   width: 100%;
   height: 100%;
@@ -424,7 +392,6 @@ main {
   transition: opacity 0.4s ease;
 }
 
-/* Placeholder shown before image loads */
 .card-image-placeholder {
   display: flex;
   flex-direction: column;
@@ -437,6 +404,7 @@ main {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 0;
 }
 
 .card-image-placeholder span {
@@ -446,7 +414,6 @@ main {
   opacity: 0.4;
 }
 
-/* Shimmer animation on placeholder */
 .card-image-placeholder::before {
   content: '';
   position: absolute;
@@ -466,9 +433,53 @@ main {
   100% { background-position:  200% 0; }
 }
 
-/* Hide placeholder once image is loaded */
 .card-image.loaded .card-image-placeholder {
   display: none;
+}
+
+/* JP sentence overlaid at the top of the image */
+.card-image-top {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 2;
+  padding: 14px 20px 28px;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.72) 0%,
+    transparent 100%
+  );
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* Translation overlaid at the bottom of the image */
+.card-image-bottom {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  z-index: 2;
+  padding: 24px 20px 14px;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.72) 0%,
+    transparent 100%
+  );
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+.card-image-top .jp-sentence {
+  font-size: calc(var(--jp-size) * 0.95);
+  text-shadow: 0 1px 8px rgba(0,0,0,0.8);
+  line-height: 1.7;
+}
+
+.card-image-bottom .translation {
+  font-size: 0.85rem;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.9);
+  color: var(--text);
+  opacity: 0.9;
 }
 
 /* ===== REVIEW BUTTONS ===== */
@@ -960,7 +971,10 @@ input[type=range]::-moz-range-thumb {
 @media (max-width: 600px) {
   header              { padding: 14px 16px; }
   main                { padding: 20px 16px; }
-  .card               { padding: 32px 24px 28px; min-height: 220px; }
+  .card               { padding: 14px 14px 18px; min-height: 280px; }
+  .card-image         { height: 200px; }
+  .card-image-top     { padding: 10px 14px 22px; }
+  .card-image-bottom  { padding: 18px 14px 10px; }
   /* DO NOT override --jp-size here — let the settings slider control it */
   .header-controls    { gap: 6px; }
 }

@@ -335,8 +335,6 @@ function renderCard() {
   card.offsetHeight; // reflow
   card.style.animation = '';
 
-  document.getElementById('cardBadge').textContent = isReviewMode ? 'REVIEW' : 'STUDY';
-  document.getElementById('cardNum').textContent   = (idx + 1) + ' / ' + src.length;
   document.getElementById('jpText').innerHTML      = buildJPHTML(s.jp);
 
   // Delete button on card
@@ -358,7 +356,6 @@ function renderCard() {
   transEl.textContent = s.en;
   transEl.classList.toggle('hidden', !showTranslation);
 
-  document.getElementById('lengthBadge').textContent  = lengthLabel(s.jp.length) + ' \u00b7 ' + s.jp.length + ' chars';
   document.getElementById('reviewBtns').style.display = isReviewMode ? 'flex' : 'none';
   document.getElementById('cardNav').style.display    = isReviewMode ? 'none' : 'flex';
 
@@ -366,9 +363,6 @@ function renderCard() {
   document.getElementById('progressFill').style.width  = src.length ? ((idx + 1) / src.length * 100) + '%' : '0%';
 
   updateDueBadge();
-
-  // Update card image (placeholder for now; Phase 2 will load real images)
-  if (typeof updateCardImage === 'function') updateCardImage(s);
 
   // Prefetch next card's audio
   if (typeof prefetchJP === 'function') {

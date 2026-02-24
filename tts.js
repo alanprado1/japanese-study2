@@ -6,9 +6,10 @@
 var GOOGLE_TTS_KEY = 'AIzaSyDqBrrjHTWooWIgPEjLue8KshfHDEH2zfE';
 var GOOGLE_TTS_URL = 'https://texttospeech.googleapis.com/v1/text:synthesize?key=' + GOOGLE_TTS_KEY;
 
-var currentAudio  = null;
-var selectedVoice = 'ja-JP-Chirp3-HD-Aoede';
-var isSpeaking    = false;
+var currentAudio     = null;
+var selectedVoice    = 'ja-JP-Chirp3-HD-Aoede';
+var isSpeaking       = false;
+var speakCancelToken = 0; // incremented on each stop to cancel in-flight fetches
 
 // ─── audio cache: avoids re-fetching the same sentence ───────
 // Key: voice + text → base64 audio string
@@ -51,7 +52,7 @@ function prefetchJP(text) {
 
 // Returns a Promise that resolves when the audio finishes playing.
 // Checks cache first — cache hit means near-zero delay.
-function speakJP(text) {
+function speakJP(text, cancelToken) {
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
 
   var key    = selectedVoice + '|' + text;
@@ -80,6 +81,7 @@ function speakJP(text) {
   }
 
   if (cached) {
+    if (cancelToken !== undefined && cancelToken !== speakCancelToken) return Promise.resolve();
     return playFromB64(cached);
   }
 
@@ -99,6 +101,7 @@ function speakJP(text) {
   .then(function(data) {
     if (!data.audioContent) throw new Error('No audioContent returned');
     cacheSet(key, data.audioContent);
+    if (cancelToken !== undefined && cancelToken !== speakCancelToken) return;
     return playFromB64(data.audioContent);
   });
 }
@@ -117,6 +120,8 @@ function speakCard() {
   var btn = document.getElementById('cardAudioBtn');
 
   if (isSpeaking) {
+    // Pause: cancel any in-flight fetch, stop current audio
+    speakCancelToken++;
     stopAudio();
     isSpeaking = false;
     if (btn) btn.classList.remove('playing');
@@ -126,10 +131,13 @@ function speakCard() {
   isSpeaking = true;
   if (btn) btn.classList.add('playing');
 
-  speakJP(s.jp)
+  var token = speakCancelToken;
+  speakJP(s.jp, token)
     .catch(function(err) {
-      console.error('TTS error:', err);
-      alert('Audio failed. Check your API key or internet connection.');
+      if (err) {
+        console.error('TTS error:', err);
+        alert('Audio failed. Check your API key or internet connection.');
+      }
     })
     .then(function() {
       isSpeaking = false;
@@ -138,6 +146,7 @@ function speakCard() {
 }
 
 function resetAudioBtn() {
+  speakCancelToken++; // cancel any in-flight fetch
   stopAudio();
   isSpeaking = false;
   var btn = document.getElementById('cardAudioBtn');
