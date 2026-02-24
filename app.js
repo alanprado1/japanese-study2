@@ -117,6 +117,7 @@ var kuromojiTokenizer = null;
 var kuromojiReady     = false;
 
 // localStorage cache: full Japanese sentence → ruby HTML string
+// Key: full Japanese sentence → ruby HTML string
 // Each sentence processed once, then instant forever.
 var furiganaCache = {};
 
@@ -131,117 +132,151 @@ function saveFuriganaCache() {
   try { localStorage.setItem('jpStudy_furigana_cache', JSON.stringify(furiganaCache)); } catch(e) {}
 }
 
+function katakanaToHiragana(str) {
+  return str.replace(/[\u30a1-\u30f6]/g, function(m) { return String.fromCharCode(m.charCodeAt(0) - 0x60); });
+}
+
+function hasKanji(str) {
+  return /[\u4e00-\u9faf\u3400-\u4dbf]/.test(str);
+}
+
 function initKuromoji() {
-  if (typeof kuromoji === 'undefined') {
-    console.warn('kuromoji.js not loaded — check that kuromoji.js is in your project');
-    return;
-  }
+  if (!window.kuromoji) return;
   kuromoji.builder({ dicPath: './dict' }).build(function(err, tokenizer) {
-    if (err) {
-      console.warn('kuromoji dict load failed:', err);
-      return;
-    }
+    if (err) { console.error('Kuromoji failed:', err); return; }
     kuromojiTokenizer = tokenizer;
-    kuromojiReady     = true;
-    // Pre-convert all sentences now while user isn't waiting
-    prefetchAllFurigana();
-    // If furigana toggle is ON, re-render so readings appear immediately
+    kuromojiReady = true;
+    // Pre-tokenize all sentences in background (both furigana ON and OFF variants)
+    sentences.forEach(function(s) {
+      var savedShow = showFurigana;
+      showFurigana = false; buildJPHTML(s.jp);
+      showFurigana = true;  buildJPHTML(s.jp);
+      showFurigana = savedShow;
+    });
     if (showFurigana) render();
   });
 }
 
-// Convert katakana → hiragana (kuromoji readings are katakana)
-function kata2hira(str) {
-  return str.replace(/[\u30A1-\u30F6]/g, function(ch) {
-    return String.fromCharCode(ch.charCodeAt(0) - 0x60);
-  });
-}
+// ── addFurigana: ruby ONLY above kanji, never above hiragana ──
+//
+// Key insight from kuromoji's actual tokenization:
+//   "食べる" → token { surface_form: "食べ", reading: "タベ" }
+//              (kuromoji splits the trailing inflection "る" into a
+//               separate token, so surface already ends in hiragana okurigana)
+//   "高い"   → token { surface_form: "高い", reading: "タカイ" }
+//   "お金"   → token { surface_form: "お金", reading: "オカネ" }
+//   "飲み物" → token { surface_form: "飲み物", reading: "ノミモノ" }
+//              (middle hiragana — handled by fallback below)
+//
+// Algorithm:
+//   1. No kanji → return surface as-is (pure kana tokens never get ruby)
+//   2. Strip matching trailing hiragana chars from both surface and reading
+//   3. Strip matching leading hiragana chars from both surface and reading
+//   4. Wrap what remains: <ruby>kanjiPart<rt>readingPart</rt></ruby>
+//   5. Fallback if stripping left nothing to annotate (middle-hiragana words
+//      like 飲み物): wrap the whole surface — still better than nothing,
+//      and these are genuinely uncommon in study sentences.
 
-// Build ruby HTML from kuromoji token array.
-// Only adds <ruby> to tokens that contain kanji AND have a reading.
-function buildRubyHTML(tokens) {
-  return tokens.map(function(token) {
-    var surface = token.surface_form;
-    var reading = token.reading;
-    if (!reading || !/[一-龯]/.test(surface)) return surface;
-    var hira = kata2hira(reading);
-    if (hira === surface) return surface; // already kana, skip
+function addFurigana(token) {
+  var surface = token.surface_form;
+  var reading = token.reading;
+
+  // Guard: no kanji, or no reading, or reading is identical to surface → plain text
+  if (!hasKanji(surface) || !reading) return surface;
+  var hira = katakanaToHiragana(reading);
+  if (hira === surface) return surface;
+
+  var surf = surface.split('');
+  var read = hira.split('');
+
+  // ── Strip matching trailing hiragana (okurigana suffix) ──
+  // Only strip hiragana [\u3041-\u3096], NOT katakana or kanji
+  var suffix = '';
+  while (
+    surf.length > 0 &&
+    read.length > 0 &&
+    /^[\u3041-\u3096]$/.test(surf[surf.length - 1]) &&
+    surf[surf.length - 1] === read[read.length - 1]
+  ) {
+    suffix = surf.pop() + suffix;
+    read.pop();
+  }
+
+  // ── Strip matching leading hiragana (okurigana prefix, e.g. お金) ──
+  var prefix = '';
+  while (
+    surf.length > 0 &&
+    read.length > 0 &&
+    /^[\u3041-\u3096]$/.test(surf[0]) &&
+    surf[0] === read[0]
+  ) {
+    prefix += surf.shift();
+    read.shift();
+  }
+
+  var kanjiPart   = surf.join('');
+  var readingPart = read.join('');
+
+  // Fallback: if stripping left an empty kanji or reading part, wrap whole surface.
+  // This handles middle-hiragana compounds (飲み物 etc.) — not perfect but safe.
+  if (!kanjiPart || !readingPart) {
     return '<ruby>' + surface + '<rt>' + hira + '</rt></ruby>';
-  }).join('');
-}
-
-// Convert one sentence to furigana HTML. Synchronous — uses cache.
-// Returns null if tokenizer not ready yet (caller handles gracefully).
-function toFuriganaHTML(text) {
-  if (furiganaCache.hasOwnProperty(text)) return furiganaCache[text];
-  if (!kuromojiReady) return null;
-  var html = buildRubyHTML(kuromojiTokenizer.tokenize(text));
-  furiganaCache[text] = html;
-  return html;
-}
-
-// Pre-convert every sentence in the background after tokenizer is ready.
-function prefetchAllFurigana() {
-  if (!kuromojiReady) return;
-  var changed = false;
-  sentences.forEach(function(s) {
-    if (!furiganaCache.hasOwnProperty(s.jp)) {
-      furiganaCache[s.jp] = buildRubyHTML(kuromojiTokenizer.tokenize(s.jp));
-      changed = true;
-    }
-  });
-  if (changed) saveFuriganaCache();
-}
-
-function buildClickableJP(text) {
-  if (showFurigana) {
-    var html = toFuriganaHTML(text);
-    if (html !== null) {
-      // Furigana ready — wrap whole sentence for click-to-lookup
-      return '<span class="jp-word jp-sentence" data-word="' +
-        text.replace(/"/g, '&quot;') + '" onclick="lookupWord(this)">' + html + '</span>';
-    }
-    // Tokenizer still loading — show plain text, will re-render when ready
-    return '<span class="jp-word jp-sentence" data-word="' +
-      text.replace(/"/g, '&quot;') + '" onclick="lookupWord(this)">' + text + '</span>';
   }
 
-  // Furigana OFF — split into individual clickable word spans
-  var re = /([一-龯々ヵヶ]+(?:[ぁ-ん]*)|[ぁ-ん]+|[ァ-ヶー]+|[a-zA-Z0-9]+|[^\s])/g;
-  var match, result = '';
-  while ((match = re.exec(text)) !== null) {
-    var t = match[0];
-    if (/[一-龯ぁ-んァ-ヶ]/.test(t)) {
-      result += '<span class="jp-word" data-word="' +
-        t.replace(/"/g, '&quot;') + '" onclick="lookupWord(this)">' + t + '</span>';
+  return prefix + '<ruby>' + kanjiPart + '<rt>' + readingPart + '</rt></ruby>' + suffix;
+}
+
+// ── buildJPHTML ───────────────────────────────────────────────
+// Builds clickable-span HTML for a Japanese sentence.
+// Cache key includes a version stamp so stale cached HTML from old
+// buggy versions is automatically discarded on first load.
+var FURIGANA_CACHE_VERSION = 'v3';
+
+function buildJPHTML(text) {
+  if (!kuromojiReady) return text;
+
+  var cacheKey = FURIGANA_CACHE_VERSION + ':' + (showFurigana ? 'f:' : 'n:') + text;
+  if (furiganaCache[cacheKey]) return furiganaCache[cacheKey];
+
+  var tokens = kuromojiTokenizer.tokenize(text);
+  var html = '';
+
+  for (var i = 0; i < tokens.length; i++) {
+    var token   = tokens[i];
+    var surface = token.surface_form;
+    var inner   = showFurigana ? addFurigana(token) : surface;
+
+    // Wrap Japanese tokens in clickable spans; leave punctuation (記号) as plain text
+    if (token.pos !== '記号') {
+      html += '<span class="jp-word" data-word="' +
+        surface.replace(/"/g, '&quot;') +
+        '" data-reading="' + (token.reading || '') +
+        '" onclick="lookupWord(this)">' + inner + '</span>';
     } else {
-      result += t;
+      html += inner;
     }
   }
-  return result;
+
+  furiganaCache[cacheKey] = html;
+  saveFuriganaCache();
+  return html;
 }
 
 // ─── word lookup popup ───────────────────────────────────────
 function lookupWord(el) {
   document.querySelectorAll('.jp-word.selected').forEach(function(e) { e.classList.remove('selected'); });
   el.classList.add('selected');
-  var word = el.dataset.word;
+  var word    = el.dataset.word;
+  var reading = el.dataset.reading
+    ? katakanaToHiragana(el.dataset.reading)
+    : (kuromojiReady
+        ? katakanaToHiragana(kuromojiTokenizer.tokenize(word).map(function(t) { return t.reading || t.surface_form; }).join(''))
+        : '—');
 
   document.getElementById('popupWord').textContent    = word;
-  document.getElementById('popupMeaning').textContent = 'Open jisho.org for meaning →';
+  document.getElementById('popupReading').textContent = reading || '—';
+  document.getElementById('popupMeaning').textContent = 'Open jisho.org for full meaning →';
 
-  // Get reading via kuromoji if ready
-  if (kuromojiReady) {
-    var tokens  = kuromojiTokenizer.tokenize(word);
-    var reading = tokens.map(function(t) {
-      return t.reading ? kata2hira(t.reading) : t.surface_form;
-    }).join('');
-    document.getElementById('popupReading').textContent = reading || '—';
-  } else {
-    document.getElementById('popupReading').textContent = '—';
-  }
-
-  // Examples from user's own sentences
   var examples = sentences.filter(function(s) { return s.jp.indexOf(word) !== -1; }).slice(0, 3);
   document.getElementById('popupExamples').innerHTML = examples.length
     ? examples.map(function(ex) {
@@ -265,7 +300,7 @@ function lengthLabel(len) {
   return 'VERY LONG';
 }
 
-// ─── render: flashcard ────────────────────────────────────────
+// ─── render: flashcard ───────────────────────────────────────
 function renderCard() {
   var filtered = getSentencesForFilter();
   if (!filtered.length) {
@@ -292,18 +327,18 @@ function renderCard() {
 
   document.getElementById('cardBadge').textContent = isReviewMode ? 'REVIEW' : 'STUDY';
   document.getElementById('cardNum').textContent   = (idx + 1) + ' / ' + src.length;
-  document.getElementById('jpText').innerHTML      = buildClickableJP(s.jp);
+  document.getElementById('jpText').innerHTML      = buildJPHTML(s.jp);
 
   // Delete button on card
   var existingDelBtn = document.getElementById('cardDeleteBtn');
   if (existingDelBtn) existingDelBtn.remove();
   if (isDeleteMode) {
     var delBtn = document.createElement('button');
-    delBtn.id = 'cardDeleteBtn';
+    delBtn.id        = 'cardDeleteBtn';
     delBtn.className = 'card-delete-btn';
     delBtn.innerHTML = '✕';
-    delBtn.title = 'Delete this sentence';
-    delBtn.onclick = function() {
+    delBtn.title     = 'Delete this sentence';
+    delBtn.onclick   = function() {
       if (confirm('Delete this sentence?')) deleteSentence(s.id);
     };
     document.getElementById('mainCard').appendChild(delBtn);
@@ -317,21 +352,18 @@ function renderCard() {
   document.getElementById('reviewBtns').style.display = isReviewMode ? 'flex' : 'none';
   document.getElementById('cardNav').style.display    = isReviewMode ? 'none' : 'flex';
 
-  // Stats bar always reflects the current active source (review queue or filtered sentences)
-  document.getElementById('statCard').textContent     = (idx + 1) + ' / ' + src.length;
-  document.getElementById('progressFill').style.width = src.length ? ((idx + 1) / src.length * 100) + '%' : '0%';
+  document.getElementById('statCard').textContent      = (idx + 1) + ' / ' + src.length;
+  document.getElementById('progressFill').style.width  = src.length ? ((idx + 1) / src.length * 100) + '%' : '0%';
 
   updateDueBadge();
 
-  // Prefetch next card's audio in the background for near-zero delay on next press
+  // Prefetch next card's audio
   if (typeof prefetchJP === 'function') {
-    var nextIdx = isReviewMode ? reviewIdx + 1 : currentIdx + 1;
-    var nextCard = src[nextIdx];
-    if (nextCard) prefetchJP(nextCard.jp);
+    var nextSrc  = src[isReviewMode ? reviewIdx + 1 : currentIdx + 1];
+    if (nextSrc) prefetchJP(nextSrc.jp);
   }
 }
 
-// ─── render: list view (fast DocumentFragment build) ─────────
 function renderListView() {
   var container = document.getElementById('listView');
 
@@ -348,7 +380,6 @@ function renderListView() {
     'LONG (17\u201324)':  [],
     'VERY LONG (25+)':    []
   };
-  // Use all sentences for group counts/display, but respect filter for which groups to show
   var sentencesToGroup = getSentencesForFilter();
   sentencesToGroup.forEach(function(s) {
     var l = s.jp.length;
@@ -368,7 +399,6 @@ function renderListView() {
     groupEl.className = 'length-group';
 
     var titleEl = document.createElement('div');
-    // Derive the filter key from this label
     var filterKey = label.split(' ')[0] === 'VERY' ? 'VERY LONG' : label.split(' ')[0];
     var isActive  = (currentLengthFilter === filterKey);
     titleEl.className = 'length-group-title' + (isActive ? ' filter-active' : '');
@@ -389,13 +419,12 @@ function renderListView() {
       item.className = 'list-item';
       item.addEventListener('click', function() { openListCard(item); });
 
-      // Safe JP for audio button
       var safeJP = s.jp.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
       item.innerHTML =
         '<div class="list-item-num">' + (i + 1) + '</div>' +
         '<div class="list-item-content">' +
-          '<div class="list-item-jp">' + buildClickableJP(s.jp) + '</div>' +
+          '<div class="list-item-jp">' + buildJPHTML(s.jp) + '</div>' +
           '<div class="list-item-en' + (showTranslation ? '' : ' hidden') + '">' + s.en + '</div>' +
         '</div>' +
         '<div class="list-item-status">' +
