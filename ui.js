@@ -97,6 +97,8 @@ document.getElementById('btnReviewMode').addEventListener('click', function() {
   reviewIdx    = 0;
   isListView   = false;
   try { localStorage.setItem('jpStudy_isListView', 'false'); } catch(e) {}
+  // Persist review session so a page refresh lands back in review mode
+  if (typeof saveReviewState === 'function') saveReviewState();
   applyViewState();
   render();
 });

@@ -91,10 +91,18 @@ function reviewCard(rating) {
     reviewIdx++;
     if (reviewIdx >= reviewQueue.length) {
       isReviewMode = false;
+      // Clear persisted review state — session is complete
+      try {
+        localStorage.setItem('jpStudy_isReviewMode', 'false');
+        localStorage.removeItem('jpStudy_reviewQueueIds');
+        localStorage.removeItem('jpStudy_reviewIdx');
+      } catch(e) {}
       alert('Review complete! Reviewed ' + reviewQueue.length + ' cards.');
       render();
       return;
     }
+    // Save updated reviewIdx so refresh restores the correct position
+    try { localStorage.setItem('jpStudy_reviewIdx', reviewIdx); } catch(e) {}
     // Only re-render the card content — don't rebuild list view
     renderCard();
   } else {
@@ -459,7 +467,7 @@ function renderListView() {
         '</div>' +
         '<div class="list-item-status">' +
           '<div class="status-dot ' + statusClass + '"></div>' +
-          '<button class="popup-audio-btn" onclick="event.stopPropagation();speakJP(\'' + safeJP + '\').catch(function(){})">\u25b6</button>' +
+          '<button class="popup-audio-btn" onclick="event.stopPropagation();speakListItem(this,\'' + safeJP + '\')">'+ICON_PLAY+'</button>' +
           (isDeleteMode ? '<button class="list-delete-btn" onclick="event.stopPropagation();(confirm(\'Delete this sentence?\')&&deleteSentence(\'' + s.id + '\'))" title="Delete">\u2715</button>' : '') +
         '</div>';
 
@@ -493,7 +501,18 @@ function toggleLengthPill(key) {
     if (!reviewQueue.length) {
       // No due cards match — gracefully exit review mode
       isReviewMode = false;
-      currentIdx = 0;
+      currentIdx   = 0;
+      try {
+        localStorage.setItem('jpStudy_isReviewMode', 'false');
+        localStorage.removeItem('jpStudy_reviewQueueIds');
+        localStorage.removeItem('jpStudy_reviewIdx');
+      } catch(e) {}
+    } else {
+      // Persist the updated queue so refresh restores the filtered state
+      try {
+        localStorage.setItem('jpStudy_reviewQueueIds', JSON.stringify(reviewQueue.map(function(s) { return s.id; })));
+        localStorage.setItem('jpStudy_reviewIdx', '0');
+      } catch(e) {}
     }
   } else {
     currentIdx = 0;
@@ -543,9 +562,41 @@ function nextCard() {
   if (currentIdx < filtered.length - 1) { currentIdx++; resetAudioBtn(); saveCurrentDeck(); renderCard(); }
 }
 
+// ─── review mode persistence ─────────────────────────────────
+// Saves isReviewMode + queue IDs + position to localStorage so a page
+// refresh mid-review restores the exact session, not card mode.
+// Queue is stored as an array of sentence IDs and reconstructed from
+// the live sentences array so stale IDs (deleted cards) are filtered out.
+function saveReviewState() {
+  try {
+    localStorage.setItem('jpStudy_isReviewMode', 'true');
+    localStorage.setItem('jpStudy_reviewQueueIds', JSON.stringify(reviewQueue.map(function(s) { return s.id; })));
+    localStorage.setItem('jpStudy_reviewIdx', reviewIdx);
+  } catch(e) {}
+}
+
+function loadReviewState() {
+  try {
+    if (localStorage.getItem('jpStudy_isReviewMode') !== 'true') return;
+    var raw = localStorage.getItem('jpStudy_reviewQueueIds');
+    if (!raw) return;
+    var ids     = JSON.parse(raw);
+    var sentMap = {};
+    sentences.forEach(function(s) { sentMap[s.id] = s; });
+    var queue   = ids.map(function(id) { return sentMap[id]; }).filter(Boolean);
+    if (!queue.length) return; // all cards were deleted — don't restore
+    var idx = parseInt(localStorage.getItem('jpStudy_reviewIdx') || '0', 10);
+    if (idx >= queue.length) idx = 0;
+    isReviewMode = true;
+    reviewQueue  = queue;
+    reviewIdx    = idx;
+  } catch(e) {}
+}
+
 // ─── init ────────────────────────────────────────────────────
 initDecks();         // decks.js  — loads deck data into globals (sentences, srsData, currentIdx)
 loadUIPrefs();       // ui.js     — restores theme, font, toggles, and sets isListView
+loadReviewState();   // app.js    — restores review mode session if one was in progress
 loadVoicePref();     // tts.js    — restores selected voice
 loadFuriganaCache(); // load cached furigana readings from localStorage
 updateDeckUI();      // decks.js  — sets deck button label + modal content
