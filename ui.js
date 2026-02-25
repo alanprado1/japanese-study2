@@ -68,12 +68,14 @@ function collapseNavOnMobile() {
 }
 
 // ─── view toggle ─────────────────────────────────────────────
+// Standard mode toggles — no header side effects.
+// The header-hidden class is only ever controlled by the mobile nav pill.
+// Keeping these buttons clean/standard means future features can build
+// on them without undoing header-collapse state unexpectedly.
 document.getElementById('btnListView').addEventListener('click', function() {
   isListView   = true;
   isReviewMode = false;
   try { localStorage.setItem('jpStudy_isListView', 'true'); } catch(e) {}
-  // Hide header on ALL screen sizes in list mode so filter bar is never obscured
-  document.querySelector('header').classList.add('header-hidden');
   applyViewState();
   render();
 });
@@ -82,8 +84,6 @@ document.getElementById('btnCardView').addEventListener('click', function() {
   isListView   = false;
   isReviewMode = false;
   try { localStorage.setItem('jpStudy_isListView', 'false'); } catch(e) {}
-  // Restore header when leaving list mode
-  document.querySelector('header').classList.remove('header-hidden');
   applyViewState();
   render();
 });
@@ -97,8 +97,6 @@ document.getElementById('btnReviewMode').addEventListener('click', function() {
   reviewIdx    = 0;
   isListView   = false;
   try { localStorage.setItem('jpStudy_isListView', 'false'); } catch(e) {}
-  // Restore header when leaving list mode into review
-  document.querySelector('header').classList.remove('header-hidden');
   applyViewState();
   render();
 });

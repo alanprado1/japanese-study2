@@ -163,7 +163,7 @@ function speakCard() {
         isSpeaking   = false;
         _setBtn(ICON_PLAY);
       });
-    }, 1020);
+    }, 160);
     return;
   }
 

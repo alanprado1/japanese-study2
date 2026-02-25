@@ -311,6 +311,11 @@ function lengthLabel(len) {
 }
 
 // ─── render: flashcard ───────────────────────────────────────
+// Tracks the last sentence id rendered so we only re-trigger the card
+// animation on real navigation, not on data-sync re-renders (e.g. the
+// Firebase pull that fires ~500ms after page load). Prevents the flash.
+var _lastRenderedSentenceId = null;
+
 function renderCard() {
   var filtered = getSentencesForFilter();
   if (!filtered.length) {
@@ -326,14 +331,32 @@ function renderCard() {
 
   var src = isReviewMode ? reviewQueue : getSentencesForFilter();
   var idx = isReviewMode ? reviewIdx  : currentIdx;
-  var s   = src[idx];
+
+  // Clamp idx to the current filtered set's bounds.
+  // currentIdx is stored relative to the filtered list. On refresh, if
+  // the filter is still active but the set is now smaller (or the deck
+  // changed), idx can exceed src.length — src[idx] is undefined and
+  // renderCard would silently return, leaving jpText blank even though
+  // cardArea is already visible.
+  if (idx >= src.length) {
+    idx = Math.max(0, src.length - 1);
+    if (!isReviewMode) currentIdx = idx;
+  }
+
+  var s = src[idx];
   if (!s) return;
 
-  // Re-trigger card animation
+  // Only re-trigger the slide-in animation when the displayed sentence
+  // actually changes. Doing it unconditionally caused a visible flash
+  // on every data-sync re-render (same card, same content, but the
+  // forced reflow + animation restart produced a noticeable jump).
   var card = document.getElementById('mainCard');
-  card.style.animation = 'none';
-  card.offsetHeight; // reflow
-  card.style.animation = '';
+  if (s.id !== _lastRenderedSentenceId) {
+    _lastRenderedSentenceId = s.id;
+    card.style.animation = 'none';
+    card.offsetHeight; // reflow
+    card.style.animation = '';
+  }
 
   document.getElementById('jpText').innerHTML      = buildJPHTML(s.jp);
 
