@@ -41,10 +41,14 @@ function setLengthFilter(label) {
 
 // ─── SRS ─────────────────────────────────────────────────────
 function getDueCards() {
+  // Only return cards that have been seen at least once (srsData entry exists)
+  // AND whose next-due time has passed.
+  // Cards with no srsData entry have never been reviewed in card mode — they
+  // are excluded from review mode entirely until the user has seen them once.
   var now = Date.now();
   return sentences.filter(function(s) {
     var d = srsData[s.id];
-    return !d || d.due <= now;
+    return d && d.due <= now;
   });
 }
 

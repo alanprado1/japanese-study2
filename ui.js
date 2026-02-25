@@ -75,7 +75,15 @@ function collapseNavOnMobile() {
 document.getElementById('btnListView').addEventListener('click', function() {
   isListView   = true;
   isReviewMode = false;
-  try { localStorage.setItem('jpStudy_isListView', 'true'); } catch(e) {}
+  try {
+    localStorage.setItem('jpStudy_isListView', 'true');
+    // Clear review state so a refresh doesn't restore review mode
+    localStorage.setItem('jpStudy_isReviewMode', 'false');
+    localStorage.removeItem('jpStudy_reviewQueueIds');
+    localStorage.removeItem('jpStudy_reviewIdx');
+    // Persist currentIdx so stats bar shows the right card on return
+    if (typeof saveCurrentDeck === 'function') saveCurrentDeck();
+  } catch(e) {}
   applyViewState();
   render();
 });
@@ -83,7 +91,15 @@ document.getElementById('btnListView').addEventListener('click', function() {
 document.getElementById('btnCardView').addEventListener('click', function() {
   isListView   = false;
   isReviewMode = false;
-  try { localStorage.setItem('jpStudy_isListView', 'false'); } catch(e) {}
+  try {
+    localStorage.setItem('jpStudy_isListView', 'false');
+    // Clear review state so a refresh doesn't restore review mode
+    localStorage.setItem('jpStudy_isReviewMode', 'false');
+    localStorage.removeItem('jpStudy_reviewQueueIds');
+    localStorage.removeItem('jpStudy_reviewIdx');
+    // Persist currentIdx so stats bar shows the right card on return
+    if (typeof saveCurrentDeck === 'function') saveCurrentDeck();
+  } catch(e) {}
   applyViewState();
   render();
 });
@@ -91,12 +107,21 @@ document.getElementById('btnCardView').addEventListener('click', function() {
 // ─── review mode ─────────────────────────────────────────────
 document.getElementById('btnReviewMode').addEventListener('click', function() {
   var due = getDueCards();
+  // Apply the active length filter to the review queue so the same filter
+  // that was active in card/list mode carries over into review mode.
+  if (currentLengthFilter) {
+    due = due.filter(function(s) { return lengthLabel(s.jp.length) === currentLengthFilter; });
+  }
   if (!due.length) { alert('No cards due for review! Come back later.'); return; }
   isReviewMode = true;
   reviewQueue  = due;
   reviewIdx    = 0;
   isListView   = false;
-  try { localStorage.setItem('jpStudy_isListView', 'false'); } catch(e) {}
+  try {
+    localStorage.setItem('jpStudy_isListView', 'false');
+    // Clear any stale card-mode state since we're now in review
+    if (typeof saveCurrentDeck === 'function') saveCurrentDeck();
+  } catch(e) {}
   // Persist review session so a page refresh lands back in review mode
   if (typeof saveReviewState === 'function') saveReviewState();
   applyViewState();
