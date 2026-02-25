@@ -35,6 +35,20 @@ function initFirebase() {
       if (user) {
         pullFromFirestore().then(function() {
           syncDeckToApp();
+          // After a cloud pull currentDeckId may have changed (e.g. last session
+          // used a different deck on another device). Reload filterIndexes so
+          // position memory is for the now-active deck, not whatever was loaded
+          // at page-init before the async pull completed.
+          if (typeof filterIndexes !== 'undefined') filterIndexes = {};
+          if (typeof loadFilterIndexes === 'function') loadFilterIndexes();
+          // Apply saved per-filter position if one exists for the active filter
+          if (typeof filterIndexes !== 'undefined' && typeof currentLengthFilter !== 'undefined') {
+            var _fi = filterIndexes[currentLengthFilter || ''];
+            if (_fi !== undefined && typeof getSentencesForFilter === 'function') {
+              var _filt = getSentencesForFilter();
+              currentIdx = (_fi < _filt.length) ? _fi : Math.max(0, _filt.length - 1);
+            }
+          }
           render();
           updateDeckUI();
         }).catch(function(e) {

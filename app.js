@@ -28,13 +28,13 @@ var currentLengthFilter = null;
 var filterIndexes = {};
 
 function saveFilterIndexes() {
-  try { localStorage.setItem('jpStudy_filterIndexes', JSON.stringify(filterIndexes)); } catch(e) {}
+  try { localStorage.setItem('jpStudy_filterIndexes_' + currentDeckId, JSON.stringify(filterIndexes)); } catch(e) {}
 }
 
 function loadFilterIndexes() {
   try {
-    var raw = localStorage.getItem('jpStudy_filterIndexes');
-    if (raw) filterIndexes = JSON.parse(raw);
+    var raw = localStorage.getItem('jpStudy_filterIndexes_' + currentDeckId);
+    filterIndexes = raw ? JSON.parse(raw) : {};
   } catch(e) { filterIndexes = {}; }
 }
 

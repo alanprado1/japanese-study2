@@ -121,6 +121,23 @@ function switchDeck(id) {
   localStorage.setItem('jpStudy_currentDeck', id);
   syncDeckToApp();
 
+  // Load the per-filter card positions for the new deck.
+  // filterIndexes is a single in-memory object — without resetting here it
+  // still holds the previous deck's positions, causing the old deck's card
+  // index to bleed into every other deck when filters are used.
+  if (typeof filterIndexes !== 'undefined') filterIndexes = {};
+  if (typeof loadFilterIndexes === 'function') loadFilterIndexes();
+  // Apply the saved position for the currently active filter in the new deck.
+  // syncDeckToApp() only restores d.currentIdx (a single flat value); if a
+  // filter is active we need the per-filter position from filterIndexes instead.
+  if (typeof filterIndexes !== 'undefined' && typeof currentLengthFilter !== 'undefined') {
+    var _fi = filterIndexes[currentLengthFilter || ''];
+    if (_fi !== undefined && typeof getSentencesForFilter === 'function') {
+      var _filt = getSentencesForFilter();
+      currentIdx = (_fi < _filt.length) ? _fi : Math.max(0, _filt.length - 1);
+    }
+  }
+
   // Push the updated currentDeckId to Firestore NOW (after it's been set)
   // so a page refresh always restores the correct deck
   if (typeof pushCurrentDeckId === 'function') pushCurrentDeckId();
