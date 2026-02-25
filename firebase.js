@@ -54,6 +54,9 @@ function signInWithGoogle() {
   if (!firebaseReady) return;
   var provider = new firebase.auth.GoogleAuthProvider();
   firebaseAuth.signInWithPopup(provider).catch(function(err) {
+    // User closed the popup before completing sign-in — not a real error, ignore silently.
+    if (err.code === 'auth/popup-closed-by-user' ||
+        err.code === 'auth/cancelled-popup-request') return;
     console.error('Sign in failed:', err);
     alert('Sign in failed: ' + err.message);
   });
