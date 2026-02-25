@@ -21,6 +21,10 @@ var isDeleteMode = false;
 // null = show all; otherwise 'SHORT','MEDIUM','LONG','VERY LONG'
 var currentLengthFilter = null;
 
+// Remembers the card index for each filter value so switching filters
+// restores position. Keys: null (all), 'SHORT', 'MEDIUM', 'LONG', 'VERY LONG'.
+var filterIndexes = {};
+
 var LENGTH_LABELS = ['SHORT', 'MEDIUM', 'LONG', 'VERY LONG'];
 
 function getSentencesForFilter() {
@@ -41,10 +45,9 @@ function setLengthFilter(label) {
 
 // ─── SRS ─────────────────────────────────────────────────────
 function getDueCards() {
-  // Only return cards that have been seen at least once (srsData entry exists)
-  // AND whose next-due time has passed.
-  // Cards with no srsData entry have never been reviewed in card mode — they
-  // are excluded from review mode entirely until the user has seen them once.
+  // Only cards that have been rated at least once (srsData entry exists)
+  // AND whose next-due time has passed. Unseen cards are excluded from
+  // review — the user must encounter them in card mode first.
   var now = Date.now();
   return sentences.filter(function(s) {
     var d = srsData[s.id];
@@ -492,16 +495,26 @@ function openListCard(el) {
 
 // ─── length filter pills (card/review/list mode) ────────────
 function toggleLengthPill(key) {
-  currentLengthFilter = (currentLengthFilter === key) ? null : key;
-  try { localStorage.setItem('jpStudy_lengthFilter', currentLengthFilter || ''); } catch(e) {}
+  var prevFilter = currentLengthFilter;
+  var newFilter  = (currentLengthFilter === key) ? null : key;
 
   if (isReviewMode) {
-    // Rebuild review queue from all due cards, then apply the length filter
+    // Save current review position for the old filter before switching
+    filterIndexes['review:' + (prevFilter || '')] = reviewIdx;
+
+    currentLengthFilter = newFilter;
+    try { localStorage.setItem('jpStudy_lengthFilter', currentLengthFilter || ''); } catch(e) {}
+
+    // Rebuild review queue for the new filter
     var allDue = getDueCards();
     reviewQueue = currentLengthFilter
       ? allDue.filter(function(s) { return lengthLabel(s.jp.length) === currentLengthFilter; })
       : allDue;
-    reviewIdx = 0;
+
+    // Restore saved position for the new filter, clamped to new queue length
+    var savedReviewIdx = filterIndexes['review:' + (currentLengthFilter || '')] || 0;
+    reviewIdx = (savedReviewIdx < reviewQueue.length) ? savedReviewIdx : 0;
+
     if (!reviewQueue.length) {
       // No due cards match — gracefully exit review mode
       isReviewMode = false;
@@ -512,14 +525,22 @@ function toggleLengthPill(key) {
         localStorage.removeItem('jpStudy_reviewIdx');
       } catch(e) {}
     } else {
-      // Persist the updated queue so refresh restores the filtered state
       try {
         localStorage.setItem('jpStudy_reviewQueueIds', JSON.stringify(reviewQueue.map(function(s) { return s.id; })));
-        localStorage.setItem('jpStudy_reviewIdx', '0');
+        localStorage.setItem('jpStudy_reviewIdx', String(reviewIdx));
       } catch(e) {}
     }
   } else {
-    currentIdx = 0;
+    // Save current card position for the old filter before switching
+    filterIndexes[prevFilter || ''] = currentIdx;
+
+    currentLengthFilter = newFilter;
+    try { localStorage.setItem('jpStudy_lengthFilter', currentLengthFilter || ''); } catch(e) {}
+
+    // Restore saved position for the new filter, clamped to new set length
+    var savedIdx = filterIndexes[currentLengthFilter || ''] || 0;
+    var newSet   = getSentencesForFilter();
+    currentIdx   = (savedIdx < newSet.length) ? savedIdx : 0;
   }
 
   render();
@@ -557,13 +578,21 @@ function render() {
 // ─── navigation ──────────────────────────────────────────────
 function prevCard() {
   if (isReviewMode) return;
-  if (currentIdx > 0) { currentIdx--; resetAudioBtn(); saveCurrentDeck(); renderCard(); }
+  if (currentIdx > 0) {
+    currentIdx--;
+    filterIndexes[currentLengthFilter || ''] = currentIdx;
+    resetAudioBtn(); saveCurrentDeck(); renderCard();
+  }
 }
 
 function nextCard() {
   if (isReviewMode) return;
   var filtered = getSentencesForFilter();
-  if (currentIdx < filtered.length - 1) { currentIdx++; resetAudioBtn(); saveCurrentDeck(); renderCard(); }
+  if (currentIdx < filtered.length - 1) {
+    currentIdx++;
+    filterIndexes[currentLengthFilter || ''] = currentIdx;
+    resetAudioBtn(); saveCurrentDeck(); renderCard();
+  }
 }
 
 // ─── review mode persistence ─────────────────────────────────
