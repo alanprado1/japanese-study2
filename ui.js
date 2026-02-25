@@ -275,9 +275,8 @@ function loadUIPrefs() {
   var lv = localStorage.getItem('jpStudy_isListView');
   if (lv === 'true') isListView = true;
 
-  // Restore length filter
-  var lf = localStorage.getItem('jpStudy_lengthFilter');
-  if (lf !== null && lf !== '') currentLengthFilter = lf;
+  // NOTE: currentLengthFilter is restored by loadCurrentLengthFilter() in
+  // app.js (deck-scoped). Do NOT restore it here from the old global key.
 }
 
 // ─── mobile: nav toggle pill ─────────────────────────────────

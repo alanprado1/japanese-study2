@@ -114,32 +114,42 @@ function switchDeck(id) {
   if (!decks[id]) return;
   if (id === currentDeckId) { closeDeckModal(); return; }
 
+  // ── 1. Persist the OUTGOING deck's state ────────────────────────────
+  // Save current card position and per-filter indexes under the old deckId
+  // BEFORE we change currentDeckId. saveFilterIndexes() uses currentDeckId
+  // as the storage key, so it must run while currentDeckId is still old.
   syncAppToDeck();
   saveDeck(currentDeckId);
+  if (typeof saveCurrentLengthFilter === 'function') saveCurrentLengthFilter();
+  if (typeof saveFilterIndexes       === 'function') saveFilterIndexes();
 
+  // ── 2. Switch ────────────────────────────────────────────────────────
   currentDeckId = id;
   localStorage.setItem('jpStudy_currentDeck', id);
-  syncDeckToApp();
+  syncDeckToApp(); // loads sentences/srsData/currentIdx for new deck
 
-  // Load the per-filter card positions for the new deck.
-  // filterIndexes is a single in-memory object — without resetting here it
-  // still holds the previous deck's positions, causing the old deck's card
-  // index to bleed into every other deck when filters are used.
+  // ── 3. Load the INCOMING deck's filter state ─────────────────────────
+  // Reset in-memory filterIndexes first so no old-deck positions bleed in.
   if (typeof filterIndexes !== 'undefined') filterIndexes = {};
-  if (typeof loadFilterIndexes === 'function') loadFilterIndexes();
-  // Apply the saved position for the currently active filter in the new deck.
-  // syncDeckToApp() only restores d.currentIdx (a single flat value); if a
-  // filter is active we need the per-filter position from filterIndexes instead.
-  if (typeof filterIndexes !== 'undefined' && typeof currentLengthFilter !== 'undefined') {
-    var _fi = filterIndexes[currentLengthFilter || ''];
-    if (_fi !== undefined && typeof getSentencesForFilter === 'function') {
-      var _filt = getSentencesForFilter();
+  if (typeof loadFilterIndexes         === 'function') loadFilterIndexes();
+  if (typeof loadCurrentLengthFilter   === 'function') loadCurrentLengthFilter();
+
+  // ── 4. Apply the per-filter card position for the new deck ───────────
+  // filterIndexes[currentLengthFilter||''] is the authoritative position
+  // for the now-active filter. Fall back to d.currentIdx (the "All" position
+  // stored in the deck object) if no per-filter entry exists yet.
+  if (typeof filterIndexes !== 'undefined' && typeof getSentencesForFilter === 'function') {
+    var _fi   = filterIndexes[currentLengthFilter || ''];
+    var _filt = getSentencesForFilter();
+    if (_fi !== undefined) {
       currentIdx = (_fi < _filt.length) ? _fi : Math.max(0, _filt.length - 1);
+    } else {
+      // No per-filter entry yet — clamp the deck's stored currentIdx
+      currentIdx = (currentIdx < _filt.length) ? currentIdx : 0;
     }
   }
 
   // Push the updated currentDeckId to Firestore NOW (after it's been set)
-  // so a page refresh always restores the correct deck
   if (typeof pushCurrentDeckId === 'function') pushCurrentDeckId();
 
   isReviewMode = false;

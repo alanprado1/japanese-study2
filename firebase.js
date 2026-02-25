@@ -36,17 +36,23 @@ function initFirebase() {
         pullFromFirestore().then(function() {
           syncDeckToApp();
           // After a cloud pull currentDeckId may have changed (e.g. last session
-          // used a different deck on another device). Reload filterIndexes so
-          // position memory is for the now-active deck, not whatever was loaded
-          // at page-init before the async pull completed.
+          // used a different deck on another device). Reload the INCOMING deck's
+          // filter state in the correct order:
+          //   1. Reset in-memory filterIndexes (no old-deck bleed)
+          //   2. Load per-deck filterIndexes for the now-active deck
+          //   3. Load the now-active deck's currentLengthFilter
+          //   4. Apply the correct per-filter card position
           if (typeof filterIndexes !== 'undefined') filterIndexes = {};
-          if (typeof loadFilterIndexes === 'function') loadFilterIndexes();
-          // Apply saved per-filter position if one exists for the active filter
-          if (typeof filterIndexes !== 'undefined' && typeof currentLengthFilter !== 'undefined') {
-            var _fi = filterIndexes[currentLengthFilter || ''];
-            if (_fi !== undefined && typeof getSentencesForFilter === 'function') {
-              var _filt = getSentencesForFilter();
+          if (typeof loadFilterIndexes       === 'function') loadFilterIndexes();
+          if (typeof loadCurrentLengthFilter === 'function') loadCurrentLengthFilter();
+          // Apply the per-filter position now that both indexes and filter are loaded
+          if (typeof filterIndexes !== 'undefined' && typeof getSentencesForFilter === 'function') {
+            var _fi   = filterIndexes[currentLengthFilter || ''];
+            var _filt = getSentencesForFilter();
+            if (_fi !== undefined) {
               currentIdx = (_fi < _filt.length) ? _fi : Math.max(0, _filt.length - 1);
+            } else {
+              currentIdx = (currentIdx < _filt.length) ? currentIdx : 0;
             }
           }
           render();
@@ -254,12 +260,9 @@ function pullFromFirestore() {
         decks[currentDeckId].currentIdx = _prePullIdx;
       }
 
-      // Restore length filter — pullFromFirestore wipes state then calls render(),
-      // so we must re-apply the saved filter here or it resets to null every refresh
-      try {
-        var savedFilter = localStorage.getItem('jpStudy_lengthFilter');
-        currentLengthFilter = (savedFilter && savedFilter !== '') ? savedFilter : null;
-      } catch(e) {}
+      // NOTE: currentLengthFilter is now restored by loadCurrentLengthFilter()
+      // (deck-scoped key jpStudy_lengthFilter_<deckId>) in the post-pull block
+      // above. The old global jpStudy_lengthFilter key is no longer used.
 
       // Persist cloud data back to localStorage so next refresh starts fresh correctly
       var deckMeta = {};
