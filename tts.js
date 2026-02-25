@@ -104,8 +104,8 @@ function speakJP(text) {
 }
 
 // SVG icons
-var ICON_PLAY  = '<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15" style="vertical-align:middle;margin-right:4px"><path d="M8 5v14l11-7z"/></svg>Play';
-var ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15" style="vertical-align:middle;margin-right:4px"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>Pause';
+var ICON_PLAY  = '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align:middle"><path d="M8 5v14l11-7z"/></svg>';
+var ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align:middle"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
 
 // pausedAudio holds the paused Audio object so Play resumes rather than restarts.
 // playToken is incremented whenever audio is stopped/paused/navigated away, so
@@ -114,10 +114,13 @@ var pausedAudio = null;
 var playToken   = 0;
 
 function _setBtn(icon) {
-  var btn = document.getElementById('cardAudioBtn');
-  if (!btn) return;
-  btn.innerHTML = icon;
-  btn.classList.toggle('playing', icon === ICON_PAUSE);
+  // Update both the card-mode button and the review-mode button
+  ['cardAudioBtn', 'reviewAudioBtn'].forEach(function(id) {
+    var btn = document.getElementById(id);
+    if (!btn) return;
+    btn.innerHTML = icon;
+    btn.classList.toggle('playing', icon === ICON_PAUSE);
+  });
 }
 
 function stopAudio() {
@@ -153,11 +156,14 @@ function speakCard() {
     currentAudio = resuming;
     isSpeaking   = true;
     _setBtn(ICON_PAUSE);
-    resuming.play().catch(function() {
-      currentAudio = null;
-      isSpeaking   = false;
-      _setBtn(ICON_PLAY);
-    });
+    setTimeout(function() {
+      if (currentAudio !== resuming) return; // cancelled during delay
+      resuming.play().catch(function() {
+        currentAudio = null;
+        isSpeaking   = false;
+        _setBtn(ICON_PLAY);
+      });
+    }, 120);
     return;
   }
 

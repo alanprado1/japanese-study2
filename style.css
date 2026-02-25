@@ -310,6 +310,12 @@ main {
   background: var(--accent-glow);
 }
 
+/* Audio button when sitting inside the review row — square, matches review-btn height */
+.review-audio-btn {
+  padding: 10px 14px;
+  line-height: 1;
+}
+
 /* ===== JAPANESE TEXT ===== */
 .jp-sentence {
   font-family: 'Kikai Chokoku JIS', 'Noto Sans JP', 'Noto Serif JP', serif;

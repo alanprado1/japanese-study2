@@ -135,6 +135,7 @@
         <div class="review-btns" id="reviewBtns" style="display:none; margin-top:16px;">
           <button class="review-btn again" onclick="reviewCard('again')">Again</button>
           <button class="review-btn hard"  onclick="reviewCard('hard')">Hard</button>
+          <button class="card-audio-btn review-audio-btn" id="reviewAudioBtn" onclick="speakCard()"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align:middle"><path d="M8 5v14l11-7z"/></svg></button>
           <button class="review-btn good"  onclick="reviewCard('good')">Good</button>
           <button class="review-btn easy"  onclick="reviewCard('easy')">Easy</button>
         </div>
@@ -142,7 +143,7 @@
         <!-- Prev / Play / Next navigation -->
         <div class="card-nav" id="cardNav">
           <button class="btn" onclick="prevCard()">← Prev</button>
-          <button class="card-audio-btn" id="cardAudioBtn" onclick="speakCard()"><svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15" style="vertical-align:middle;margin-right:4px"><path d="M8 5v14l11-7z"/></svg>Play</button>
+          <button class="card-audio-btn" id="cardAudioBtn" onclick="speakCard()"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align:middle"><path d="M8 5v14l11-7z"/></svg></button>
           <button class="btn" onclick="nextCard()">Next →</button>
         </div>
       </div>
