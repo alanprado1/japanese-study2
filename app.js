@@ -22,8 +22,21 @@ var isDeleteMode = false;
 var currentLengthFilter = null;
 
 // Remembers the card index for each filter value so switching filters
-// restores position. Keys: null (all), 'SHORT', 'MEDIUM', 'LONG', 'VERY LONG'.
+// restores position. Keys: null→'', 'SHORT', 'MEDIUM', 'LONG', 'VERY LONG'.
+// Also stores review-mode positions under 'review:SHORT' etc.
+// Persisted to localStorage so it survives refresh, sign-out, and Firebase pulls.
 var filterIndexes = {};
+
+function saveFilterIndexes() {
+  try { localStorage.setItem('jpStudy_filterIndexes', JSON.stringify(filterIndexes)); } catch(e) {}
+}
+
+function loadFilterIndexes() {
+  try {
+    var raw = localStorage.getItem('jpStudy_filterIndexes');
+    if (raw) filterIndexes = JSON.parse(raw);
+  } catch(e) { filterIndexes = {}; }
+}
 
 var LENGTH_LABELS = ['SHORT', 'MEDIUM', 'LONG', 'VERY LONG'];
 
@@ -373,6 +386,15 @@ function renderCard() {
     card.style.animation = '';
   }
 
+  // ── Mark card as seen on first view ─────────────────────────────────
+  // Creates a srsData entry with due = now so the card immediately appears
+  // in review mode. Runs only once per card (guard: !srsData[s.id]).
+  // Does NOT run in review mode — rating buttons handle that path.
+  if (!isReviewMode && !srsData[s.id]) {
+    srsData[s.id] = { interval: 0, due: Date.now(), ease: 2.5, reps: 0, lastRating: null };
+    saveCurrentDeck();
+  }
+
   document.getElementById('jpText').innerHTML      = buildJPHTML(s.jp);
 
   // Delete button on card
@@ -501,6 +523,7 @@ function toggleLengthPill(key) {
   if (isReviewMode) {
     // Save current review position for the old filter before switching
     filterIndexes['review:' + (prevFilter || '')] = reviewIdx;
+    saveFilterIndexes();
 
     currentLengthFilter = newFilter;
     try { localStorage.setItem('jpStudy_lengthFilter', currentLengthFilter || ''); } catch(e) {}
@@ -533,6 +556,7 @@ function toggleLengthPill(key) {
   } else {
     // Save current card position for the old filter before switching
     filterIndexes[prevFilter || ''] = currentIdx;
+    saveFilterIndexes();
 
     currentLengthFilter = newFilter;
     try { localStorage.setItem('jpStudy_lengthFilter', currentLengthFilter || ''); } catch(e) {}
@@ -581,6 +605,7 @@ function prevCard() {
   if (currentIdx > 0) {
     currentIdx--;
     filterIndexes[currentLengthFilter || ''] = currentIdx;
+    saveFilterIndexes();
     resetAudioBtn(); saveCurrentDeck(); renderCard();
   }
 }
@@ -591,6 +616,7 @@ function nextCard() {
   if (currentIdx < filtered.length - 1) {
     currentIdx++;
     filterIndexes[currentLengthFilter || ''] = currentIdx;
+    saveFilterIndexes();
     resetAudioBtn(); saveCurrentDeck(); renderCard();
   }
 }
@@ -629,6 +655,7 @@ function loadReviewState() {
 // ─── init ────────────────────────────────────────────────────
 initDecks();         // decks.js  — loads deck data into globals (sentences, srsData, currentIdx)
 loadUIPrefs();       // ui.js     — restores theme, font, toggles, and sets isListView
+loadFilterIndexes(); // app.js    — restores per-filter card positions from localStorage
 loadReviewState();   // app.js    — restores review mode session if one was in progress
 loadVoicePref();     // tts.js    — restores selected voice
 loadFuriganaCache(); // load cached furigana readings from localStorage
