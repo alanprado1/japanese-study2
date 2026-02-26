@@ -40,11 +40,15 @@ function setLengthFilter(label) {
 }
 
 // ─── SRS ─────────────────────────────────────────────────────
+// Only cards that have been seen in card mode (have an srsData entry)
+// AND whose due time has passed are eligible for review.
+// Unseen cards (no srsData entry) are excluded — the user must encounter
+// them in card mode first before they enter the SRS review cycle.
 function getDueCards() {
   var now = Date.now();
   return sentences.filter(function(s) {
     var d = srsData[s.id];
-    return !d || d.due <= now;
+    return d && d.due <= now;
   });
 }
 
@@ -345,6 +349,15 @@ function renderCard() {
 
   var s = src[idx];
   if (!s) return;
+
+  // ── Mark card as seen on first view ─────────────────────────────────
+  // Creates a srsData entry with due = now so the card immediately appears
+  // in review mode. Runs only once per card (guard: !srsData[s.id]).
+  // Does NOT run in review mode — rating buttons handle that path.
+  if (!isReviewMode && !srsData[s.id]) {
+    srsData[s.id] = { interval: 0, due: Date.now(), ease: 2.5, reps: 0, lastRating: null };
+    saveCurrentDeck();
+  }
 
   // Only re-trigger the slide-in animation when the displayed sentence
   // actually changes. Doing it unconditionally caused a visible flash

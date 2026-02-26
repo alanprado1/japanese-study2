@@ -248,4 +248,7 @@ function confirmDeleteDeck(id) {
 }
 
 function openDeckModal()  { renderDeckModal(); document.getElementById('deckModal').classList.add('active'); }
-function closeDeckModal() { document.getElementById('deckModal').classList.remove('active'); }
+function closeDeckModal() {
+  document.getElementById('deckModal').classList.remove('active');
+  if (typeof collapseNavOnMobile === 'function') collapseNavOnMobile();
+}

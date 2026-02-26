@@ -47,6 +47,7 @@ document.getElementById('btnToggleTranslation').addEventListener('click', functi
   btn.classList.toggle('active', showTranslation);
   btn.textContent = showTranslation ? 'Translation ON' : 'Translation OFF';
   try { localStorage.setItem('jpStudy_translation', showTranslation); } catch(e) {}
+  collapseNavOnMobile();
   render();
 });
 
@@ -57,6 +58,7 @@ document.getElementById('btnToggleFurigana').addEventListener('click', function(
   btn.classList.toggle('active', showFurigana);
   btn.textContent = showFurigana ? '振仮名 ON' : '振仮名 OFF';
   try { localStorage.setItem('jpStudy_furigana', showFurigana); } catch(e) {}
+  collapseNavOnMobile();
   render();
 });
 
@@ -76,6 +78,7 @@ document.getElementById('btnListView').addEventListener('click', function() {
   isListView   = true;
   isReviewMode = false;
   try { localStorage.setItem('jpStudy_isListView', 'true'); } catch(e) {}
+  collapseNavOnMobile();
   applyViewState();
   render();
 });
@@ -84,6 +87,7 @@ document.getElementById('btnCardView').addEventListener('click', function() {
   isListView   = false;
   isReviewMode = false;
   try { localStorage.setItem('jpStudy_isListView', 'false'); } catch(e) {}
+  collapseNavOnMobile();
   applyViewState();
   render();
 });
@@ -97,6 +101,7 @@ document.getElementById('btnReviewMode').addEventListener('click', function() {
   reviewIdx    = 0;
   isListView   = false;
   try { localStorage.setItem('jpStudy_isListView', 'false'); } catch(e) {}
+  collapseNavOnMobile();
   applyViewState();
   render();
 });
@@ -113,8 +118,11 @@ settingsBtn.addEventListener('click', function(e) {
 
 document.addEventListener('click', function(e) {
   if (!settingsPanel.contains(e.target) && e.target !== settingsBtn) {
-    settingsPanel.classList.remove('active');
-    settingsBtn.classList.remove('active');
+    if (settingsPanel.classList.contains('active')) {
+      settingsPanel.classList.remove('active');
+      settingsBtn.classList.remove('active');
+      collapseNavOnMobile();
+    }
   }
 });
 
