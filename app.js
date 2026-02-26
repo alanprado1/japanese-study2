@@ -40,11 +40,10 @@ function setLengthFilter(label) {
 }
 
 // ─── SRS ─────────────────────────────────────────────────────
-// Only cards that have been seen in card mode (have an srsData entry)
-// AND whose due time has passed are eligible for review.
-// Unseen cards (no srsData entry) are excluded — the user must encounter
-// them in card mode first before they enter the SRS review cycle.
 function getDueCards() {
+  // Only cards that have been seen in card mode (have an srsData entry)
+  // AND whose due time has passed. Cards with no entry have never been
+  // shown in card mode and must not appear in review.
   var now = Date.now();
   return sentences.filter(function(s) {
     var d = srsData[s.id];
@@ -350,10 +349,11 @@ function renderCard() {
   var s = src[idx];
   if (!s) return;
 
-  // ── Mark card as seen on first view ─────────────────────────────────
-  // Creates a srsData entry with due = now so the card immediately appears
-  // in review mode. Runs only once per card (guard: !srsData[s.id]).
-  // Does NOT run in review mode — rating buttons handle that path.
+  // Mark card as seen the first time it's shown in card mode.
+  // This creates an srsData entry with due = now so the card becomes
+  // eligible for review immediately after being seen once.
+  // Guard (!srsData[s.id]) ensures this runs exactly once per card.
+  // Skipped entirely in review mode — rating buttons own that path.
   if (!isReviewMode && !srsData[s.id]) {
     srsData[s.id] = { interval: 0, due: Date.now(), ease: 2.5, reps: 0, lastRating: null };
     saveCurrentDeck();
