@@ -1208,6 +1208,7 @@ input[type=range]::-moz-range-thumb {
 }
 .deck-action-btn:hover        { color: var(--text); border-color: var(--text3); }
 .deck-action-btn.danger:hover { color: #ff6b6b; border-color: #ff6b6b; }
+.deck-action-btn.img-gen-on   { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
 
 /* ===== LIST ITEMS — card-style restyle ===== */
 .list-item {

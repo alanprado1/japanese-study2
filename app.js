@@ -400,11 +400,13 @@ function renderCard() {
 
   updateDueBadge();
 
-  // Prefetch next card's audio
-  if (typeof prefetchJP === 'function') {
-    var nextSrc  = src[isReviewMode ? reviewIdx + 1 : currentIdx + 1];
-    if (nextSrc) prefetchJP(nextSrc.jp);
-  }
+  // Update card image (Ghibli AI art if enabled for this deck, else placeholder)
+  if (typeof updateCardImage === 'function') updateCardImage(s);
+
+  // Prefetch next card's audio and image
+  var nextSrc = src[isReviewMode ? reviewIdx + 1 : currentIdx + 1];
+  if (typeof prefetchJP === 'function' && nextSrc) prefetchJP(nextSrc.jp);
+  if (typeof prefetchCardImage === 'function' && nextSrc) prefetchCardImage(nextSrc);
 }
 
 function renderListView() {

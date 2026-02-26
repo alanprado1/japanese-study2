@@ -24,7 +24,8 @@ function saveDeck(id) {
   if (!d) return;
   try {
     localStorage.setItem('jpStudy_deck_' + id, JSON.stringify({
-      name: d.name, sentences: d.sentences, srsData: d.srsData, currentIdx: d.currentIdx
+      name: d.name, sentences: d.sentences, srsData: d.srsData, currentIdx: d.currentIdx,
+      imageGenEnabled: d.imageGenEnabled || false
     }));
   } catch(e) { console.warn('saveDeck quota exceeded?', e); }
   // Mirror to Firestore if signed in
@@ -70,17 +71,18 @@ function initDecks() {
         decks[id].sentences  = decks[id].sentences  || [];
         decks[id].srsData    = decks[id].srsData    || {};
         decks[id].currentIdx = decks[id].currentIdx || 0;
+        if (decks[id].imageGenEnabled === undefined) decks[id].imageGenEnabled = false;
       });
       var saved = localStorage.getItem('jpStudy_currentDeck');
       currentDeckId = (saved && decks[saved]) ? saved : Object.keys(decks)[0];
     } else {
-      decks['default'] = { name: 'Default', sentences: [], srsData: {}, currentIdx: 0 };
+      decks['default'] = { name: 'Default', sentences: [], srsData: {}, currentIdx: 0, imageGenEnabled: false };
       currentDeckId = 'default';
       saveDeck('default');
       saveDeckList();
     }
   } catch(e) {
-    decks['default'] = { name: 'Default', sentences: [], srsData: {}, currentIdx: 0 };
+    decks['default'] = { name: 'Default', sentences: [], srsData: {}, currentIdx: 0, imageGenEnabled: false };
     currentDeckId = 'default';
   }
 
@@ -137,7 +139,7 @@ function switchDeck(id) {
 // ─── create / rename / delete ─────────────────────────────────
 function createDeck(name) {
   var id = 'deck_' + Date.now();
-  decks[id] = { name: name, sentences: [], srsData: {}, currentIdx: 0 };
+  decks[id] = { name: name, sentences: [], srsData: {}, currentIdx: 0, imageGenEnabled: false };
   saveDeck(id);
   saveDeckList();
   return id;
@@ -225,10 +227,12 @@ function renderDeckModal() {
   ids.forEach(function(id) {
     var d     = decks[id];
     var count = (id === currentDeckId) ? sentences.length : d.sentences.length;
+    var imgOn = d.imageGenEnabled;
     html += '<div class="deck-item' + (id === currentDeckId ? ' active' : '') + '" onclick="switchDeck(\'' + id + '\')" style="cursor:pointer">' +
       '<span class="deck-item-name">' + d.name + '</span>' +
       '<span class="deck-item-count">' + count + ' sentences</span>' +
       '<div class="deck-item-actions" onclick="event.stopPropagation()">' +
+        '<button class="deck-action-btn' + (imgOn ? ' img-gen-on' : '') + '" onclick="toggleImageGen(\'' + id + '\')" title="' + (imgOn ? 'Disable AI images' : 'Enable AI images') + '">' + (imgOn ? '\uD83C\uDF04' : '\uD83D\uDDBC\uFE0F') + '</button>' +
         '<button class="deck-action-btn" onclick="promptRenameDeck(\'' + id + '\')" title="Rename">\u270e</button>' +
         '<button class="deck-action-btn" onclick="exportDeckById(\'' + id + '\')" title="Export">\u2193</button>' +
         (canDel ? '<button class="deck-action-btn danger" onclick="confirmDeleteDeck(\'' + id + '\')" title="Delete">\u2715</button>' : '') +

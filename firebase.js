@@ -114,10 +114,11 @@ function pushDeckToFirestore(deckId) {
 
   // Write full deck data
   batch.set(deckRef, {
-    name:       d.name,
-    sentences:  d.sentences,
-    srsData:    d.srsData,
-    currentIdx: d.currentIdx
+    name:            d.name,
+    sentences:       d.sentences,
+    srsData:         d.srsData,
+    currentIdx:      d.currentIdx,
+    imageGenEnabled: d.imageGenEnabled || false
   });
 
   return batch.commit().catch(function(e) {
@@ -196,17 +197,18 @@ function pullFromFirestore() {
         if (!meta[id]) return;
         var d  = deckDoc.data();
         cloudDecks[id] = {
-          name:       d.name       || meta[id].name,
-          sentences:  d.sentences  || [],
-          srsData:    d.srsData    || {},
-          currentIdx: d.currentIdx || 0
+          name:            d.name            || meta[id].name,
+          sentences:       d.sentences       || [],
+          srsData:         d.srsData         || {},
+          currentIdx:      d.currentIdx      || 0,
+          imageGenEnabled: d.imageGenEnabled || false
         };
       });
 
       // Any decks in meta without a doc (empty decks)
       Object.keys(meta).forEach(function(id) {
         if (!cloudDecks[id]) {
-          cloudDecks[id] = { name: meta[id].name, sentences: [], srsData: {}, currentIdx: 0 };
+          cloudDecks[id] = { name: meta[id].name, sentences: [], srsData: {}, currentIdx: 0, imageGenEnabled: false };
         }
       });
 
@@ -233,10 +235,11 @@ function pullFromFirestore() {
         deckMeta[id] = { name: decks[id].name };
         try {
           localStorage.setItem('jpStudy_deck_' + id, JSON.stringify({
-            name:       decks[id].name,
-            sentences:  decks[id].sentences,
-            srsData:    decks[id].srsData,
-            currentIdx: decks[id].currentIdx
+            name:            decks[id].name,
+            sentences:       decks[id].sentences,
+            srsData:         decks[id].srsData,
+            currentIdx:      decks[id].currentIdx,
+            imageGenEnabled: decks[id].imageGenEnabled || false
           }));
         } catch(e) { console.warn('localStorage write failed for deck', id, e); }
       });
