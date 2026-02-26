@@ -54,9 +54,6 @@ function signInWithGoogle() {
   if (!firebaseReady) return;
   var provider = new firebase.auth.GoogleAuthProvider();
   firebaseAuth.signInWithPopup(provider).catch(function(err) {
-    // User closed the popup before completing sign-in — not a real error, ignore silently.
-    if (err.code === 'auth/popup-closed-by-user' ||
-        err.code === 'auth/cancelled-popup-request') return;
     console.error('Sign in failed:', err);
     alert('Sign in failed: ' + err.message);
   });
@@ -213,16 +210,6 @@ function pullFromFirestore() {
         }
       });
 
-      // ── Preserve local currentIdx before overwriting with cloud ──
-      // currentIdx is "which card you're looking at" — pure UI state.
-      // Firestore stores the idx from the last push, which may lag behind
-      // the local value if the user navigated cards and refreshed before
-      // the async push completed. Without this guard the cloud's older
-      // idx value clobbers the local one, causing the stats bar to jump
-      // and a visible card-content flash on every page refresh.
-      var _prePullDeckId = currentDeckId;
-      var _prePullIdx    = decks[_prePullDeckId] ? decks[_prePullDeckId].currentIdx : 0;
-
       // Fully replace local state with cloud state
       decks = cloudDecks;
 
@@ -232,13 +219,6 @@ function pullFromFirestore() {
         currentDeckId = Object.keys(decks)[0];
       }
       localStorage.setItem('jpStudy_currentDeck', currentDeckId);
-
-      // If the active deck hasn't changed, restore the local card position.
-      // If the active deck DID change (switched on another device) we use
-      // the cloud's idx so the user lands on the correct card for that deck.
-      if (currentDeckId === _prePullDeckId && decks[currentDeckId]) {
-        decks[currentDeckId].currentIdx = _prePullIdx;
-      }
 
       // Restore length filter — pullFromFirestore wipes state then calls render(),
       // so we must re-apply the saved filter here or it resets to null every refresh
