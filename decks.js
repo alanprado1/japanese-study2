@@ -232,7 +232,7 @@ function renderDeckModal() {
       '<span class="deck-item-name">' + d.name + '</span>' +
       '<span class="deck-item-count">' + count + ' sentences</span>' +
       '<div class="deck-item-actions" onclick="event.stopPropagation()">' +
-        '<button class="deck-action-btn' + (imgOn ? ' img-gen-on' : '') + '" onclick="toggleImageGen(\'' + id + '\')" title="' + (imgOn ? 'Disable AI images' : 'Enable AI images') + '">' + (imgOn ? '\uD83C\uDF04' : '\uD83D\uDDBC\uFE0F') + '</button>' +
+        '<button class="deck-action-btn' + (imgOn ? ' img-gen-on' : '') + '" onclick="toggleImageGen(\'' + id + '\')" title="' + (imgOn ? 'Disable AI images' : 'Enable AI images') + '">' + (imgOn ? 'AI \u7D75\u25CF' : 'AI \u7D75') + '</button>' +
         '<button class="deck-action-btn" onclick="promptRenameDeck(\'' + id + '\')" title="Rename">\u270e</button>' +
         '<button class="deck-action-btn" onclick="exportDeckById(\'' + id + '\')" title="Export">\u2193</button>' +
         (canDel ? '<button class="deck-action-btn danger" onclick="confirmDeleteDeck(\'' + id + '\')" title="Delete">\u2715</button>' : '') +
