@@ -5,13 +5,25 @@
 
 var POLLINATIONS_KEY = 'sk_qu92tw0tCoYDRIEZHLmNAgJ8j9phHCE9';
 
+// Bump this version whenever the URL format changes.
+// On mismatch, the old cache is discarded so stale URLs don't persist.
+var IMAGE_CACHE_VERSION = 'v4';
+
 // Cache: sentenceId → URL string
 var imageUrlCache = {};
-// Track which sentences are currently loading (to avoid double-requests)
+// Track active loads to avoid duplicate requests
 var _imageLoading = {};
 
 function loadImageUrlCache() {
   try {
+    var version = localStorage.getItem('jpStudy_image_cache_ver');
+    if (version !== IMAGE_CACHE_VERSION) {
+      // URL format changed — old cached URLs are invalid, start fresh
+      localStorage.removeItem('jpStudy_image_urls');
+      localStorage.setItem('jpStudy_image_cache_ver', IMAGE_CACHE_VERSION);
+      imageUrlCache = {};
+      return;
+    }
     var raw = localStorage.getItem('jpStudy_image_urls');
     if (raw) imageUrlCache = JSON.parse(raw);
   } catch(e) { imageUrlCache = {}; }
@@ -33,7 +45,7 @@ function isImageGenEnabled() {
   return !!(d && d.imageGenEnabled);
 }
 
-// Deterministic seed per sentence — same card always gets the same scene
+// Deterministic seed — same card always gets the same Ghibli scene
 function _seedFromId(id) {
   var hash = 0, str = String(id);
   for (var i = 0; i < str.length; i++) {
@@ -44,22 +56,37 @@ function _seedFromId(id) {
 }
 
 // Responsive dimensions matching .card-image CSS
-// Desktop: card-image is 70% width × 352px tall → request 520×300
-// Mobile (≤600px CSS): card-image is 90% width × 352px tall → request 360×280
 function _imageSize() {
   return window.innerWidth <= 600
     ? { w: 360, h: 280 }
     : { w: 520, h: 300 };
 }
 
-// Build URL using gen.pollinations.ai with API key.
-// This is the authenticated endpoint — bypasses rate limiting that blocks mobile
-// (mobile carriers use NAT: many phones share one IP, hitting free-tier limits instantly).
-function _buildImageUrl(sentence) {
+// ─── dual-endpoint URL builders ───────────────────────────────
+// Primary:   image.pollinations.ai with ?token=KEY
+//            Official authenticated endpoint — works on desktop & mobile.
+// Fallback:  gen.pollinations.ai with ?key=KEY
+//            Authenticated newer API — used if primary fails.
+
+function _buildPrimaryUrl(sentence) {
   var size   = _imageSize();
   var prompt = 'Ghibli style: ' + (sentence.en || sentence.jp);
   var seed   = _seedFromId(sentence.id);
+  return 'https://image.pollinations.ai/prompt/' +
+    encodeURIComponent(prompt) +
+    '?model=flux' +
+    '&width='   + size.w +
+    '&height='  + size.h +
+    '&seed='    + seed +
+    '&nologo=true' +
+    '&enhance=true' +
+    '&token='   + POLLINATIONS_KEY;
+}
 
+function _buildFallbackUrl(sentence) {
+  var size   = _imageSize();
+  var prompt = 'Ghibli style: ' + (sentence.en || sentence.jp);
+  var seed   = _seedFromId(sentence.id);
   return 'https://gen.pollinations.ai/image/' +
     encodeURIComponent(prompt) +
     '?model=flux' +
@@ -81,8 +108,7 @@ function _currentSentenceId(el) {
   return el.getAttribute('data-sentence-id');
 }
 
-// ─── core update function ─────────────────────────────────────
-// Called by renderCard() on every card change.
+// ─── core update ─────────────────────────────────────────────
 
 function updateCardImage(sentence) {
   var el = document.getElementById('cardImage');
@@ -92,7 +118,7 @@ function updateCardImage(sentence) {
   var prevId = _currentSentenceId(el);
   if (prevId) delete _imageLoading[prevId];
 
-  // Clear previous state
+  // Reset
   el.classList.remove('loaded');
   var existing = el.querySelector('img');
   if (existing) existing.remove();
@@ -103,65 +129,78 @@ function updateCardImage(sentence) {
 
   _setPlaceholderText(el, '...');
 
-  // Build URL once, cache it
+  // Cache the primary URL for this sentence (once per session)
   if (!imageUrlCache[sentence.id]) {
-    imageUrlCache[sentence.id] = _buildImageUrl(sentence);
+    imageUrlCache[sentence.id] = _buildPrimaryUrl(sentence);
     _saveImageUrlCache();
   }
 
-  _loadImage(el, imageUrlCache[sentence.id], sentence.id, 0);
+  _loadImage(el, sentence, imageUrlCache[sentence.id], 'primary', 0);
 }
 
-// ─── load with retry ─────────────────────────────────────────
-// retryCount: number of times we've already retried (max 2)
+// ─── load with endpoint fallback + retry ─────────────────────
+// endpoint: 'primary' | 'fallback'
+// retryCount: retries on the current endpoint (max 1 each)
 
-function _loadImage(el, url, sentenceId, retryCount) {
-  el.setAttribute('data-sentence-id', String(sentenceId));
-  _imageLoading[sentenceId] = true;
+function _loadImage(el, sentence, url, endpoint, retryCount) {
+  el.setAttribute('data-sentence-id', String(sentence.id));
+  _imageLoading[sentence.id] = true;
 
   var img = document.createElement('img');
   img.alt = '';
 
-  // Timeout: Pollinations can be slow. If nothing after 45s, trigger error handler.
+  // 45-second timeout — Pollinations AI generation can be slow
   var timeoutId = setTimeout(function() {
-    if (_imageLoading[sentenceId]) {
-      img.src = ''; // abort
+    if (_imageLoading[sentence.id]) {
+      img.src = '';
       handleError();
     }
   }, 45000);
 
   function handleError() {
     clearTimeout(timeoutId);
-    delete _imageLoading[sentenceId];
+    delete _imageLoading[sentence.id];
     if (img.parentNode) img.parentNode.removeChild(img);
 
-    // Check this card is still displayed
-    if (_currentSentenceId(el) !== String(sentenceId)) return;
+    // Bail if user navigated away
+    if (_currentSentenceId(el) !== String(sentence.id)) return;
 
-    if (retryCount < 2) {
-      // Retry after a short delay — mobile network hiccup or server busy
-      var delay = (retryCount + 1) * 3000; // 3s, then 6s
+    if (endpoint === 'primary' && retryCount < 1) {
+      // Retry primary once after 3s
       _setPlaceholderText(el, '...');
       setTimeout(function() {
-        if (_currentSentenceId(el) !== String(sentenceId)) return;
-        // Rebuild URL fresh on retry (clears any bad cached state)
-        var freshUrl = _buildImageUrl({ id: sentenceId, en: '', jp: '' });
-        // Try to find the actual sentence for the proper prompt
-        if (typeof sentences !== 'undefined') {
-          for (var i = 0; i < sentences.length; i++) {
-            if (String(sentences[i].id) === String(sentenceId)) {
-              freshUrl = _buildImageUrl(sentences[i]);
-              break;
-            }
-          }
-        }
-        imageUrlCache[sentenceId] = freshUrl;
+        if (_currentSentenceId(el) !== String(sentence.id)) return;
+        var freshUrl = _buildPrimaryUrl(sentence);
+        imageUrlCache[sentence.id] = freshUrl;
         _saveImageUrlCache();
-        _loadImage(el, freshUrl, sentenceId, retryCount + 1);
-      }, delay);
+        _loadImage(el, sentence, freshUrl, 'primary', retryCount + 1);
+      }, 3000);
+
+    } else if (endpoint !== 'fallback') {
+      // Primary exhausted — switch to fallback endpoint
+      _setPlaceholderText(el, '...');
+      setTimeout(function() {
+        if (_currentSentenceId(el) !== String(sentence.id)) return;
+        var fallbackUrl = _buildFallbackUrl(sentence);
+        imageUrlCache[sentence.id] = fallbackUrl;
+        _saveImageUrlCache();
+        _loadImage(el, sentence, fallbackUrl, 'fallback', 0);
+      }, 2000);
+
+    } else if (endpoint === 'fallback' && retryCount < 1) {
+      // Retry fallback once after 5s
+      _setPlaceholderText(el, '...');
+      setTimeout(function() {
+        if (_currentSentenceId(el) !== String(sentence.id)) return;
+        var freshUrl = _buildFallbackUrl(sentence);
+        imageUrlCache[sentence.id] = freshUrl;
+        _saveImageUrlCache();
+        _loadImage(el, sentence, freshUrl, 'fallback', retryCount + 1);
+      }, 5000);
+
     } else {
-      // All retries exhausted — clear cache so next navigation tries fresh
-      delete imageUrlCache[sentenceId];
+      // All endpoints and retries exhausted
+      delete imageUrlCache[sentence.id];
       _saveImageUrlCache();
       _setPlaceholderText(el, '✕');
     }
@@ -169,26 +208,27 @@ function _loadImage(el, url, sentenceId, retryCount) {
 
   img.onload = function() {
     clearTimeout(timeoutId);
-    delete _imageLoading[sentenceId];
-    if (_currentSentenceId(el) !== String(sentenceId)) return;
+    delete _imageLoading[sentence.id];
+    if (_currentSentenceId(el) !== String(sentence.id)) return;
     el.classList.add('loaded');
     _setPlaceholderText(el, '絵');
   };
 
   img.onerror = handleError;
 
-  // Append to DOM BEFORE setting src so onload fires with img in tree
+  // Append BEFORE setting src — ensures img is in DOM if onload fires synchronously
+  // (happens on browser disk-cache hits)
   el.appendChild(img);
   img.src = url;
 }
 
-// ─── prefetch for next card ───────────────────────────────────
+// ─── prefetch next card ───────────────────────────────────────
 
 function prefetchCardImage(sentence) {
   if (!sentence || !isImageGenEnabled()) return;
   if (imageUrlCache[sentence.id]) return;
 
-  var url = _buildImageUrl(sentence);
+  var url = _buildPrimaryUrl(sentence);
   imageUrlCache[sentence.id] = url;
   _saveImageUrlCache();
 
@@ -196,7 +236,7 @@ function prefetchCardImage(sentence) {
   img.src = url;
 }
 
-// ─── toggle (called from deck modal button) ───────────────────
+// ─── toggle ───────────────────────────────────────────────────
 
 function toggleImageGen(deckId) {
   var d = decks[deckId];
@@ -207,28 +247,27 @@ function toggleImageGen(deckId) {
   if (deckId === currentDeckId && typeof render === 'function') render();
 }
 
-// ─── page visibility: retry when tab becomes active again ─────
-// Mobile: browser suspends tabs in background. When user returns,
-// any pending loads may have been killed. Re-trigger the current card.
+// ─── tab visibility: retry stalled loads when user returns ────
+
 document.addEventListener('visibilitychange', function() {
   if (document.visibilityState !== 'visible') return;
   if (!isImageGenEnabled()) return;
 
   var el = document.getElementById('cardImage');
   if (!el) return;
-
-  // If the card has no image loaded and no active load in progress, retry
   var sentenceId = _currentSentenceId(el);
   if (!sentenceId) return;
   if (el.classList.contains('loaded')) return;
   if (_imageLoading[sentenceId]) return;
 
-  // Find the sentence and re-trigger
+  // Find the sentence object and retry from primary
   if (typeof sentences !== 'undefined') {
     for (var i = 0; i < sentences.length; i++) {
       if (String(sentences[i].id) === sentenceId) {
-        var url = imageUrlCache[sentenceId] || _buildImageUrl(sentences[i]);
-        _loadImage(el, url, sentenceId, 0);
+        var s = sentences[i];
+        var url = _buildPrimaryUrl(s);
+        imageUrlCache[sentenceId] = url;
+        _loadImage(el, s, url, 'primary', 0);
         return;
       }
     }
