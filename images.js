@@ -25,7 +25,7 @@ var MAX_CACHED_IMAGES = 300;
 // ─── shared IndexedDB promise ─────────────────────────────────
 // Exposed on window so tts.js can reuse the same connection.
 var DB_NAME    = 'jpStudy_db';
-var DB_VERSION = 1;
+var DB_VERSION = 2; // bumped: forces onupgradeneeded to create missing stores
 
 window._jpStudyDB = new Promise(function(resolve, reject) {
   var req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -42,8 +42,15 @@ window._jpStudyDB = new Promise(function(resolve, reject) {
     }
   };
 
-  req.onsuccess = function(e) { resolve(e.target.result); };
-  req.onerror   = function(e) { reject(e.target.error); };
+  req.onsuccess = function(e) {
+    var db = e.target.result;
+    console.log('[IDB] jpStudy_db v' + db.version + ' open. Stores:', Array.from(db.objectStoreNames).join(', '));
+    resolve(db);
+  };
+  req.onerror = function(e) {
+    console.error('[IDB] Failed to open jpStudy_db:', e.target.error);
+    reject(e.target.error);
+  };
 });
 
 // ─── in-memory layer ─────────────────────────────────────────
