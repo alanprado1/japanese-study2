@@ -93,9 +93,20 @@ function reviewCard(rating) {
   if (isReviewMode) {
     reviewIdx++;
     if (reviewIdx >= reviewQueue.length) {
+      // Try to advance to the next length category that has due cards
+      var next = _findNextReviewBatch();
+      if (next) {
+        currentLengthFilter = next.label;
+        try { localStorage.setItem('jpStudy_lengthFilter', currentLengthFilter); } catch(e) {}
+        reviewQueue = next.queue;
+        reviewIdx   = 0;
+        render(); // updates filter bar to show new active pill
+        return;
+      }
+      // Truly done — no due cards in any category
       isReviewMode = false;
-      alert('Review complete! Reviewed ' + reviewQueue.length + ' cards.');
       render();
+      alert('✓ All reviews complete!');
       return;
     }
     // Only re-render the card content — don't rebuild list view
@@ -103,6 +114,27 @@ function reviewCard(rating) {
   } else {
     nextCard();
   }
+}
+
+// Find the next length category (after currentLengthFilter) that has due cards.
+// Returns { label, queue } or null if nothing left anywhere.
+function _findNextReviewBatch() {
+  // Only auto-advance when a filter is active — "All" mode has no concept of next
+  if (!currentLengthFilter) return null;
+
+  var allDue = getDueCards();
+  if (!allDue.length) return null;
+
+  var order = ['SHORT', 'MEDIUM', 'LONG', 'VERY LONG'];
+  var start = order.indexOf(currentLengthFilter);
+
+  // Walk forward from current (wrapping), skip current label
+  for (var i = 1; i < order.length; i++) {
+    var label = order[(start + i) % order.length];
+    var queue = allDue.filter(function(s) { return lengthLabel(s.jp.length) === label; });
+    if (queue.length) return { label: label, queue: queue };
+  }
+  return null;
 }
 
 // ─── furigana via kuromoji (self-hosted dict) ─────────────────
