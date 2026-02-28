@@ -211,19 +211,19 @@ I've never drunk wine."></textarea>
 
     <div class="settings-row" style="margin-bottom:0">
       <div class="settings-label">Voice</div>
-      <div class="weight-btns" style="flex-direction:column; gap:5px; align-items:stretch;">
-        <button class="speaker-btn weight-btn active" data-sid="ja-JP-Chirp3-HD-Aoede"  onclick="setSpeaker('ja-JP-Chirp3-HD-Aoede')">Aoede — female</button>
-        <button class="speaker-btn weight-btn"        data-sid="ja-JP-Chirp3-HD-Kore"   onclick="setSpeaker('ja-JP-Chirp3-HD-Kore')">Kore — female</button>
-        <button class="speaker-btn weight-btn"        data-sid="ja-JP-Chirp3-HD-Leda"   onclick="setSpeaker('ja-JP-Chirp3-HD-Leda')">Leda — female</button>
-        <button class="speaker-btn weight-btn"        data-sid="ja-JP-Chirp3-HD-Zephyr" onclick="setSpeaker('ja-JP-Chirp3-HD-Zephyr')">Zephyr — female</button>
-        <button class="speaker-btn weight-btn"        data-sid="ja-JP-Chirp3-HD-Charon" onclick="setSpeaker('ja-JP-Chirp3-HD-Charon')">Charon — male</button>
-        <button class="speaker-btn weight-btn"        data-sid="ja-JP-Chirp3-HD-Fenrir" onclick="setSpeaker('ja-JP-Chirp3-HD-Fenrir')">Fenrir — male</button>
-        <button class="speaker-btn weight-btn"        data-sid="ja-JP-Chirp3-HD-Orus"   onclick="setSpeaker('ja-JP-Chirp3-HD-Orus')">Orus — male</button>
-        <button class="speaker-btn weight-btn"        data-sid="ja-JP-Chirp3-HD-Puck"   onclick="setSpeaker('ja-JP-Chirp3-HD-Puck')">Puck — male</button>
+
+      <!-- Provider selector -->
+      <div class="weight-btns" style="gap:5px;margin-bottom:10px;">
+        <button class="provider-btn weight-btn active" data-provider="google"
+                onclick="setProvider('google')">Google</button>
+        <button class="provider-btn weight-btn" data-provider="elevenlabs"
+                onclick="setProvider('elevenlabs')">ElevenLabs</button>
+        <button class="provider-btn weight-btn" data-provider="microsoft"
+                onclick="setProvider('microsoft')">Microsoft</button>
       </div>
-      <div style="font-family:'DM Mono',monospace;font-size:0.62rem;color:var(--text3);margin-top:10px;line-height:1.6;">
-        Powered by <strong style="color:var(--text2)">Google Chirp 3 HD</strong>
-      </div>
+
+      <!-- Voice list — re-rendered by _renderVoicePanel() -->
+      <div id="voicePanel"></div>
     </div>
   </div>
 
