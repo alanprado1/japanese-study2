@@ -24,9 +24,9 @@
 var GOOGLE_TTS_KEY   = 'AIzaSyDqBrrjHTWooWIgPEjLue8KshfHDEH2zfE';
 var GOOGLE_TTS_URL   = 'https://texttospeech.googleapis.com/v1/text:synthesize?key=' + GOOGLE_TTS_KEY;
 
-var ELEVENLABS_KEY   = '0f0704648329dd39026e88b43e3dc8bc0d9403600d542e8ce6082c31eb0fea79';
+var ELEVENLABS_KEY   = 'sk_505985290737398ea773e6782a02176e3ddad588b4110efb';
 var ELEVENLABS_URL   = 'https://api.elevenlabs.io/v1/text-to-speech/';
-var ELEVENLABS_MODEL = 'eleven_multilingual_v2';
+var ELEVENLABS_MODEL = 'eleven_turbo_v2_5';
 
 // ─── provider & voice state ───────────────────────────────────
 var selectedProvider = 'google';
@@ -210,7 +210,7 @@ function _fetchElevenLabs(text) {
     body: JSON.stringify({
       text:           text,
       model_id:       ELEVENLABS_MODEL,
-      voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0, use_speaker_boost: true }
+      voice_settings: { stability: 0.5 }
     })
   })
   .then(function(res) {
