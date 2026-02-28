@@ -96,11 +96,15 @@ document.getElementById('btnCardView').addEventListener('click', function() {
 document.getElementById('btnReviewMode').addEventListener('click', function() {
   var due = getDueCards();
   if (!due.length) { alert('No cards due for review! Come back later.'); return; }
-  isReviewMode = true;
-  reviewQueue  = due;
-  reviewIdx    = 0;
-  isListView   = false;
-  try { localStorage.setItem('jpStudy_isListView', 'false'); } catch(e) {}
+  isReviewMode        = true;
+  reviewQueue         = due;
+  reviewIdx           = 0;
+  isListView          = false;
+  currentLengthFilter = null; // always start review with ALL cards
+  try {
+    localStorage.setItem('jpStudy_isListView', 'false');
+    localStorage.setItem('jpStudy_lengthFilter', '');
+  } catch(e) {}
   collapseNavOnMobile();
   applyViewState();
   render();

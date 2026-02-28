@@ -506,7 +506,7 @@ function renderListView() {
         '</div>' +
         '<div class="list-item-status">' +
           '<div class="status-dot ' + statusClass + '"></div>' +
-          '<button class="popup-audio-btn" onclick="event.stopPropagation();speakJP(\'' + safeJP + '\').catch(function(){})">\u25b6</button>' +
+          '<button class="popup-audio-btn" onclick="event.stopPropagation();speakJP(\'' + safeJP + '\',this).catch(function(){})">\u25b6</button>' +
           (isDeleteMode ? '<button class="list-delete-btn" onclick="event.stopPropagation();(confirm(\'Delete this sentence?\')&&deleteSentence(\'' + s.id + '\'))" title="Delete">\u2715</button>' : '') +
         '</div>';
 
