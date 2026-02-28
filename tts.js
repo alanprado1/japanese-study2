@@ -1,14 +1,12 @@
 /* ============================================================
    積む — tts.js  (load order: 2nd)
-   Multi-provider Text-to-Speech: Google, ElevenLabs, Edge/Browser
+   Multi-provider Text-to-Speech: Google, ElevenLabs
 
    Providers:
-   ─ Google:       Chirp 3 HD voices (ja-JP). Returns base64 JSON.
-   ─ ElevenLabs:   Japanese voices, Eleven v3 model. Returns audio/mpeg binary.
-   ─ Edge/Browser: Web Speech API — browser-native, no API key required.
-                   Best quality in Microsoft Edge with Japanese language pack.
+   ─ Google:      Chirp 3 HD voices (ja-JP). Returns base64 JSON.
+   ─ ElevenLabs:  Japanese voices, Multilingual v2 model. Returns audio/mpeg binary.
 
-   Audio cache (Google + ElevenLabs only):
+   Audio cache:
    ─ In-memory:  audioCache (key → base64), 50-entry LRU.
    ─ IndexedDB:  'audio' store in jpStudy_db. Persists across sessions.
    ─ Cache key:  "provider:voice|text"
@@ -58,11 +56,6 @@ var VOICE_CATALOGUE = {
     { id: 'bqpOyYNUu11tjjvRUbKn', label: 'Yamato — male, versatile'              },
     { id: 'b34JylakFZPlGS0BnwyY', label: 'Kenzo — male, professional'            },
     { id: '8EkOjt4xTPGMclNlh1pk', label: 'Morioki — female, conversational AI'   }
-  ],
-  edge: [
-    // Populated at runtime by _loadEdgeVoices() from window.speechSynthesis.getVoices()
-    // This fallback entry is replaced once voices load
-    { id: '__loading__', label: 'Loading browser voices…' }
   ]
 };
 
@@ -200,7 +193,7 @@ function _fetchElevenLabs(text) {
       '. Copy the ID from elevenlabs.io → Voices and paste it in tts.js.'
     ));
   }
-  return fetch(ELEVENLABS_URL + selectedVoice + '?output_format=mp3_44100_128', {
+  return fetch(ELEVENLABS_URL + selectedVoice + '?output_format=mp3_22050_32', {
     method:'POST',
     headers: {
       'Accept':'audio/mpeg',
@@ -238,127 +231,6 @@ function prefetchJP(text) {
   });
 }
 
-// ─── Web Speech API (Edge/Browser provider) ───────────────────
-var _wssSpeaking    = false;  // Web Speech API is currently speaking
-var _wssPaused      = false;  // Web Speech API is paused
-var _wssCurrentBtn  = null;   // button that triggered the current utterance
-var _wssCurrentCard = false;  // whether current utterance was triggered via speakCard
-
-function _loadEdgeVoices() {
-  if (!window.speechSynthesis) return;
-  var voices   = speechSynthesis.getVoices();
-  var jaVoices = voices.filter(function(v) { return v.lang && v.lang.indexOf('ja') === 0; });
-  if (!jaVoices.length) return;
-
-  VOICE_CATALOGUE.edge = jaVoices.map(function(v) {
-    return { id: v.voiceURI, label: v.name };
-  });
-
-  // If on edge provider and saved voice no longer valid, reset to first
-  if (selectedProvider === 'edge') {
-    var valid = VOICE_CATALOGUE.edge.some(function(v) { return v.id === selectedVoice; });
-    if (!valid) {
-      selectedVoice = VOICE_CATALOGUE.edge[0].id;
-      try { localStorage.setItem('jpStudy_voice', selectedVoice); } catch(e) {}
-    }
-    _renderVoicePanel();
-  }
-}
-
-// Get the speechSynthesis voice object matching selectedVoice (or best ja-JP fallback)
-function _getEdgeVoice() {
-  var voices = speechSynthesis.getVoices();
-  return voices.filter(function(v) { return v.voiceURI === selectedVoice; })[0]
-      || voices.filter(function(v) { return v.lang && v.lang.indexOf('ja') === 0; })[0]
-      || null;
-}
-
-function _speakEdge(text, btnEl, isCard) {
-  if (!window.speechSynthesis) {
-    alert('Web Speech API not supported in this browser. Try Chrome or Edge.');
-    return;
-  }
-
-  // ── PAUSE ─────────────────────────────────────────────────
-  // Same button clicked while speaking → pause
-  if (_wssSpeaking && !_wssPaused) {
-    var sameBtn  = btnEl  && _wssCurrentBtn  === btnEl;
-    var sameCard = isCard && _wssCurrentCard;
-    if (sameBtn || sameCard) {
-      speechSynthesis.pause();
-      _wssPaused   = true;
-      _wssSpeaking = false;
-      isSpeaking   = false;
-      if (_wssCurrentBtn)  _wssCurrentBtn.innerHTML  = '&#9654;';
-      if (_wssCurrentCard) _setBtn(ICON_PLAY);
-      return;
-    }
-  }
-
-  // ── RESUME ────────────────────────────────────────────────
-  // Same button clicked while paused → resume
-  if (_wssPaused) {
-    var sameBtnR  = btnEl  && _wssCurrentBtn  === btnEl;
-    var sameCardR = isCard && _wssCurrentCard;
-    if (sameBtnR || sameCardR) {
-      speechSynthesis.resume();
-      _wssPaused   = false;
-      _wssSpeaking = true;
-      isSpeaking   = true;
-      if (_wssCurrentBtn)  _wssCurrentBtn.innerHTML  = ICON_PAUSE;
-      if (_wssCurrentCard) _setBtn(ICON_PAUSE);
-      return;
-    }
-  }
-
-  // ── NEW utterance ─────────────────────────────────────────
-  speechSynthesis.cancel();
-  _wssSpeaking = false;
-  _wssPaused   = false;
-  isSpeaking   = false;
-  // Reset previous button icons
-  if (_wssCurrentBtn)              { _wssCurrentBtn.innerHTML = '&#9654;'; }
-  if (_wssCurrentCard)             { _setBtn(ICON_PLAY); }
-
-  _wssCurrentBtn  = btnEl  || null;
-  _wssCurrentCard = !!isCard;
-
-  var utterance  = new SpeechSynthesisUtterance(text);
-  var edgeVoice  = _getEdgeVoice();
-  if (edgeVoice) utterance.voice = edgeVoice;
-  utterance.lang = 'ja-JP';
-  utterance.rate = 0.9;
-
-  utterance.onstart = function() {
-    _wssSpeaking = true;
-    _wssPaused   = false;
-    isSpeaking   = true;
-    if (btnEl)   btnEl.innerHTML = ICON_PAUSE;
-    if (isCard)  _setBtn(ICON_PAUSE);
-  };
-  utterance.onend = function() {
-    _wssSpeaking    = false;
-    _wssPaused      = false;
-    isSpeaking      = false;
-    _wssCurrentBtn  = null;
-    _wssCurrentCard = false;
-    if (btnEl)  btnEl.innerHTML = '&#9654;';
-    if (isCard) _setBtn(ICON_PLAY);
-  };
-  utterance.onerror = function(e) {
-    if (e.error === 'interrupted' || e.error === 'canceled') return; // intentional cancel
-    _wssSpeaking    = false;
-    _wssPaused      = false;
-    isSpeaking      = false;
-    _wssCurrentBtn  = null;
-    _wssCurrentCard = false;
-    if (btnEl)  btnEl.innerHTML = '&#9654;';
-    if (isCard) _setBtn(ICON_PLAY);
-  };
-
-  speechSynthesis.speak(utterance);
-}
-
 // ─── SVG icons ───────────────────────────────────────────────
 var ICON_PLAY  = '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align:middle"><path d="M8 5v14l11-7z"/></svg>';
 var ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align:middle"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
@@ -379,10 +251,6 @@ function _setBtn(icon) {
 function stopAudio() {
   playToken++;
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  if (window.speechSynthesis) { speechSynthesis.cancel(); }
-  _wssSpeaking = false; _wssPaused = false;
-  if (_wssCurrentBtn)              { _wssCurrentBtn.innerHTML = '&#9654;'; _wssCurrentBtn = null; }
-  if (_wssCurrentCard)             { _wssCurrentCard = false; }
   if (_listAudioBtn)               { _listAudioBtn.innerHTML = '&#9654;'; _listAudioBtn = null; }
   pausedAudio = null;
   isSpeaking  = false;
@@ -393,12 +261,6 @@ function stopAudio() {
 // With btnEl: supports pause/resume toggle on the same button.
 // Without btnEl: one-shot play (word popup), stops any current audio.
 function speakJP(text, btnEl) {
-  // Edge/Browser provider — delegate entirely
-  if (selectedProvider === 'edge') {
-    _speakEdge(text, btnEl || null, false);
-    return Promise.resolve();
-  }
-
   var key = _cacheKey(text);
 
   // ── PAUSE (same list button, currently playing) ────────────
@@ -483,12 +345,6 @@ function speakCard() {
   var idx = isReviewMode ? reviewIdx  : currentIdx;
   var s   = src[idx];
   if (!s) return;
-
-  // Edge/Browser provider — delegate
-  if (selectedProvider === 'edge') {
-    _speakEdge(s.jp, null, true);
-    return;
-  }
 
   // Reset any active list button and its paused state
   if (_listAudioBtn) {
@@ -591,7 +447,6 @@ function setProvider(provider) {
     localStorage.setItem('jpStudy_provider', provider);
     localStorage.setItem('jpStudy_voice', selectedVoice);
   } catch(e) {}
-  if (provider === 'edge') _loadEdgeVoices();
   _renderVoicePanel();
 }
 
@@ -622,14 +477,7 @@ function _renderVoicePanel() {
   });
   html += '</div>';
 
-  // Edge-specific note
-  if (selectedProvider === 'edge') {
-    html += '<div style="font-family:\'DM Mono\',monospace;font-size:0.62rem;color:var(--text3);' +
-      'margin-top:8px;line-height:1.6;">Uses your <strong style="color:var(--text2)">browser\'s built-in voices</strong>.' +
-      ' Best in Edge with Japanese language pack installed. No API key needed.</div>';
-  }
-
-  var credit = { google: 'Google Chirp 3 HD', elevenlabs: 'ElevenLabs Eleven v3', edge: 'Edge / Browser (Web Speech API)' };
+  var credit = { google: 'Google Chirp 3 HD', elevenlabs: 'ElevenLabs Multilingual v2' };
   html += '<div style="font-family:\'DM Mono\',monospace;font-size:0.62rem;color:var(--text3);margin-top:6px;line-height:1.6;">' +
     'Powered by <strong style="color:var(--text2)">' + credit[selectedProvider] + '</strong></div>';
 
@@ -643,15 +491,6 @@ function loadVoicePref() {
     if (prov && VOICE_CATALOGUE[prov]) selectedProvider = prov;
     if (voice) selectedVoice = voice;
   } catch(e) {}
-
-  // Load Edge voices — may be async on first page load
-  if (window.speechSynthesis) {
-    if (speechSynthesis.getVoices().length) {
-      _loadEdgeVoices();
-    } else {
-      speechSynthesis.onvoiceschanged = _loadEdgeVoices;
-    }
-  }
 
   _renderVoicePanel();
 }
