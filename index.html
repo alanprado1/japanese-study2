@@ -31,6 +31,7 @@
         ⏱ Review
         <span class="due-badge" id="dueBadge" style="display:none">0</span>
       </button>
+      <button class="btn" id="btnStoryBuilder" onclick="toggleStoryMode()">📖 Stories</button>
       <button class="btn" id="btnDeleteMode">✕ Del</button>
       <button class="btn" id="btnDeckSelect">⊞ Deck</button>
       <button class="btn btn-accent" id="btnAddSentences">+ Add</button>
@@ -152,6 +153,28 @@
     <!-- List view -->
     <div class="list-view" id="listView"></div>
 
+    <!-- ===== STORY SCREEN ===== -->
+    <!-- Shown when isStoryMode === true, hidden otherwise.           -->
+    <!-- enterStoryMode() / exitStoryMode() manage display toggling.  -->
+    <div id="storyScreen" style="display:none">
+
+      <!-- Sub-header: back button + title -->
+      <div class="sb-screen-header">
+        <button class="btn" onclick="exitStoryMode()">← Back</button>
+        <div>
+          <div class="sb-screen-title-main">📖 StoryBuilder</div>
+          <div class="sb-screen-title-sub">Generate immersive stories from your study sentences</div>
+        </div>
+      </div>
+
+      <!-- Stats: sentences · reviewed · stories — updated by renderStoryScreen() -->
+      <div class="sb-info-bar" id="sbInfoBar">—</div>
+
+      <!-- SRS groups + story cards — rendered by renderStoryScreen() -->
+      <div id="sbGroupsContainer"></div>
+
+    </div><!-- /#storyScreen -->
+
   </main>
 
   <!-- ===== ADD SENTENCES MODAL ===== -->
@@ -225,6 +248,55 @@ I've never drunk wine."></textarea>
     </div>
   </div>
 
+  <!-- ===== STORY GENERATE MODAL ===== -->
+  <!-- Opened by sbOpenGenModal(groupType). Uses existing .modal styles.  -->
+  <div class="modal-overlay" id="sbGenModal">
+    <div class="modal" style="max-width:440px">
+      <h2>Generate Story</h2>
+      <div class="sb-gen-subtitle" id="sbGenModalTitle">AGAIN FOCUS</div>
+      <div class="sb-gen-count"   id="sbGenModalCount">0 sentences available</div>
+
+      <!-- Pages slider -->
+      <div class="settings-row">
+        <div class="settings-label">
+          Pages <span id="sbPagesVal">5</span>
+        </div>
+        <input type="range" id="sbPagesSlider" min="1" max="20" step="1" value="5"
+               oninput="sbUpdatePagesSlider(this.value)">
+        <div class="sb-slider-hints"><span>1</span><span>20</span></div>
+      </div>
+
+      <!-- Page density / length -->
+      <div class="settings-row" style="margin-top:16px">
+        <div class="settings-label">Page length</div>
+        <div class="weight-btns">
+          <button class="sb-density-btn" data-chars="80"
+                  onclick="sbSetDensity(80)">Short</button>
+          <button class="sb-density-btn active" data-chars="120"
+                  onclick="sbSetDensity(120)">Medium</button>
+          <button class="sb-density-btn" data-chars="200"
+                  onclick="sbSetDensity(200)">Long</button>
+        </div>
+      </div>
+
+      <div class="modal-hint" style="margin-top:12px">
+        Anchor sentences from your rated cards appear verbatim in the story.
+        AI-generated filler connects them into a cohesive narrative.
+      </div>
+
+      <div class="modal-actions" style="margin-top:20px">
+        <button class="btn" onclick="sbCloseGenModal()">Cancel</button>
+        <button class="btn btn-accent" onclick="sbConfirmGenerate()">✦ Generate</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== STORY READER OVERLAY ===== -->
+  <!-- Full-screen reader — populated by storyreader.js (Session C).     -->
+  <div id="storyReaderOverlay" style="display:none">
+    <!-- Session C: page content, navigation, TTS, furigana toggles -->
+  </div>
+
   <!-- ===== WORD LOOKUP POPUP ===== -->
   <div class="popup-overlay" id="wordPopup">
     <div class="popup">
@@ -276,6 +348,8 @@ I've never drunk wine."></textarea>
 <script src="tts.js"></script>
 <script src="ui.js"></script>
 <script src="images.js"></script>
+<script src="storybuilder.js"></script>
+<script src="storyreader.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

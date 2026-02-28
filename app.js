@@ -1,6 +1,9 @@
 /* ============================================================
-   積む — app.js  (load order: 4th / last)
+   積む — app.js  (load order: 8th / last)
    Core state, SRS, rendering, navigation
+
+   Load order: firebase.js → decks.js → tts.js → ui.js →
+               images.js → storybuilder.js → storyreader.js → app.js
    ============================================================ */
 
 // ─── global state ────────────────────────────────────────────
@@ -16,6 +19,13 @@ var srsData         = {};
 
 var INTERVALS  = { again: 1, hard: 3, good: 10, easy: 30 }; // minutes
 var isDeleteMode = false;
+
+// ─── story mode state ─────────────────────────────────────────
+// Managed by storybuilder.js / storyreader.js.
+// Declared here so all modules share the same globals.
+var isStoryMode    = false;  // true while story selection screen is active
+var currentStory   = null;   // the story object open in the reader (Session C)
+var currentPageIdx = 0;      // current page index in the reader (Session C)
 
 // ─── length filter ───────────────────────────────────────────
 // null = show all; otherwise 'SHORT','MEDIUM','LONG','VERY LONG'
@@ -577,6 +587,15 @@ function updateLengthFilterBar() {
 
 // ─── main render ─────────────────────────────────────────────
 function render() {
+  // Story mode owns the screen — delegate to storybuilder.js
+  // isStoryMode is true when the story selection screen is active.
+  // We return early so stats bar, filter bar, and card/list views
+  // are not touched while the story screen is displayed.
+  if (isStoryMode) {
+    if (typeof renderStoryScreen === 'function') renderStoryScreen();
+    return;
+  }
+
   if (isListView) renderListView();
   else            renderCard();
   updateDueBadge();
