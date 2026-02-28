@@ -47,14 +47,18 @@ var VOICE_CATALOGUE = {
     { id: 'ja-JP-Chirp3-HD-Puck',   label: 'Puck — male'     }
   ],
   elevenlabs: [
-    { id: '6wdSVG3CMjPfAthsnMv9', label: 'Makoto — male, narration'           },
-    { id: '3JDquces8E8bkmvbh6Bc', label: 'Otani — male, narration'            },
-    { id: 'Mv8AjrYZCBkdsmDHNwcB', label: 'Ishibashi — male, authoritative'    },
-    { id: 'j210dv0vWm7fCknyQpbA', label: 'Hinata — male, smooth'              },
-    { id: 'WQz3clzUdMqvBf0jswZQ', label: 'Shizuka — female, storytelling'     },
-    { id: 'bqpOyYNUu11tjjvRUbKn', label: 'Yamato — male, versatile'           },
-    { id: 'b34JylakFZPlGS0BnwyY', label: 'Kenzo — male, professional'         },
-    { id: '8EkOjt4xTPGMclNlh1pk', label: 'Morioki — female, conversational'   }
+    // ElevenLabs premade (default) voices — available on free tier via API.
+    // All speak Japanese via the eleven_multilingual_v2 model.
+    { id: '21m00Tcm4TlvDq8ikWAM', label: 'Rachel — female, clear'     },
+    { id: 'EXAVITQu4vr4xnSDxMaL', label: 'Bella — female, soft'       },
+    { id: 'MF3mGyEYCl7XYWbV9V6O', label: 'Elli — female, younger'     },
+    { id: 'piTKgcLEGmPE4e6mEKli', label: 'Nicole — female, calm'      },
+    { id: 'ThT5KcBeYPX3keUQqHPh', label: 'Dorothy — female, warm'     },
+    { id: 'pNInz6obpgDQGcFmaJgB', label: 'Adam — male, clear'         },
+    { id: 'TxGEqnHWrfWFTfGW9XjX', label: 'Josh — male, deep'          },
+    { id: 'yoZ06aMxZJJ28mfd3POQ', label: 'Sam — male, raspy'          },
+    { id: 'VR6AewLTigWG4xSOukaG', label: 'Arnold — male, crisp'       },
+    { id: 'N2lVS1w4EtoT3dr4eOWO', label: 'Callum — male, intense'     }
   ]
 };
 
@@ -393,15 +397,13 @@ function _playB64(b64, token, onEnd, onError) {
 }
 
 // ─── smooth pause ────────────────────────────────────────────
-// Fades gain 1→0 over FADE_MS then pauses the element.
-// Saves audio+gain into pausedAudio/pausedGain for resume.
+// Fades gain 1→0 over FADE_MS, then pauses the element.
+// Always pauses the specific audio element passed in — no stale-reference checks.
 function _doPause(audio, gain, afterPause) {
   isSpeaking = false;
   isPaused   = true;
   _rampGain(gain, 1, 0, FADE_MS).then(function() {
-    if (audio === currentAudio || audio === pausedAudio) {
-      try { audio.pause(); } catch(e) {}
-    }
+    try { audio.pause(); } catch(e) {}
     if (afterPause) afterPause();
   });
 }
