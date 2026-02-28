@@ -608,7 +608,6 @@ function render() {
     _ss.style.display = 'none';
   }
 
-  syncViewBtnActive(); // keep Cards/List highlight in sync on every render
   if (isListView) renderListView();
   else            renderCard();
   updateDueBadge();
@@ -616,15 +615,6 @@ function render() {
 }
 
 // ─── view mode switching ─────────────────────────────────────
-// Syncs the .active highlight on Cards / List buttons to match isListView.
-// Defined here (not ui.js) so every file can call it safely after app.js loads.
-function syncViewBtnActive() {
-  var c = document.getElementById('btnCardView');
-  var l = document.getElementById('btnListView');
-  if (c) c.classList.toggle('active', !isListView);
-  if (l) l.classList.toggle('active',  isListView);
-}
-//
 // Called by the Cards and List buttons in index.html.
 // Replaces the old toggle pattern — each button always does exactly one thing.
 // Also called by storybuilder.js nav interceptors for clean state restoration.
@@ -644,7 +634,10 @@ function setViewMode(mode) {
   isReviewMode = false;
 
   // Update active state on both view buttons
-  syncViewBtnActive();
+  var cardBtn = document.getElementById('btnCardView');
+  var listBtn = document.getElementById('btnListView');
+  if (cardBtn) cardBtn.classList.toggle('active', !isListView);
+  if (listBtn) listBtn.classList.toggle('active',  isListView);
 
   // Sync list-view CSS class (needed for .list-view { display:none } → .list-view.active)
   var listViewEl = document.getElementById('listView');
@@ -677,7 +670,13 @@ updateDeckUI();      // decks.js  — sets deck button label + modal content
 applyViewState();    // ui.js     — syncs DOM to isListView/isReviewMode flags
 
 // Sync the Cards/List button active states on first load.
-syncViewBtnActive();
+// isListView is set by loadUIPrefs() above; we just need to reflect it.
+(function _syncViewBtns() {
+  var cardBtn = document.getElementById('btnCardView');
+  var listBtn = document.getElementById('btnListView');
+  if (cardBtn) cardBtn.classList.toggle('active', !isListView);
+  if (listBtn) listBtn.classList.toggle('active',  isListView);
+})();
 
 if (window.speechSynthesis) { speechSynthesis.onvoiceschanged = function() {}; speechSynthesis.getVoices(); }
 

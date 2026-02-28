@@ -25,9 +25,6 @@ function applyViewState() {
     btnCard.style.display = 'none';
     statsBar.style.display = sentences.length ? 'flex' : 'none';
   }
-  // Keep Cards/List buttons highlighted for the current view.
-  // Guard with typeof — applyViewState() can be called before app.js loads.
-  if (typeof syncViewBtnActive === 'function') syncViewBtnActive();
 }
 
 // ─── themes ──────────────────────────────────────────────────
