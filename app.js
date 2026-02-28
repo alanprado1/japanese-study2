@@ -527,20 +527,25 @@ function openListCard(el) {
 
 // ─── length filter pills (card/review/list mode) ────────────
 function toggleLengthPill(key) {
+  var previousFilter  = currentLengthFilter; // save BEFORE mutating
   currentLengthFilter = (currentLengthFilter === key) ? null : key;
   try { localStorage.setItem('jpStudy_lengthFilter', currentLengthFilter || ''); } catch(e) {}
 
   if (isReviewMode) {
-    // Rebuild review queue from all due cards, then apply the length filter
+    // Rebuild review queue from due cards filtered by the new category
     var allDue = getDueCards();
-    reviewQueue = currentLengthFilter
+    var newQueue = currentLengthFilter
       ? allDue.filter(function(s) { return lengthLabel(s.jp.length) === currentLengthFilter; })
       : allDue;
-    reviewIdx = 0;
-    if (!reviewQueue.length) {
-      // No due cards match — gracefully exit review mode
-      isReviewMode = false;
-      currentIdx = 0;
+    if (!newQueue.length) {
+      // No due cards in this category — revert the filter and stay in review
+      currentLengthFilter = previousFilter;
+      try { localStorage.setItem('jpStudy_lengthFilter', currentLengthFilter || ''); } catch(e) {}
+      alert('No due cards in this category.');
+      // reviewQueue and reviewIdx are untouched — current card stays
+    } else {
+      reviewQueue = newQueue;
+      reviewIdx   = 0;
     }
   } else {
     currentIdx = 0;
