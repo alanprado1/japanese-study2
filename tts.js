@@ -12,7 +12,7 @@
    ─ Cache key:  "provider:voice|text"
    ─ LRU cap:    200 entries in IDB.
 
-   Pause/resume works in ALL modes:
+   Pause/resume: smooth 80ms fade via Web Audio API GainNode (no clicks or gaps).
    ─ Card/Review: speakCard() — buttons #cardAudioBtn, #reviewAudioBtn
    ─ List view:   speakJP(text, btnEl) — button element passed in
    ─ Word popup:  speakJP(text) — no btn, one-shot play
@@ -29,13 +29,12 @@ var ELEVENLABS_MODEL = 'eleven_multilingual_v2';
 // ─── provider & voice state ───────────────────────────────────
 var selectedProvider = 'google';
 var selectedVoice    = 'ja-JP-Chirp3-HD-Aoede';
-var currentAudio     = null;
+var currentAudio     = null;  // current HTMLAudioElement
+var currentGain      = null;  // current GainNode (Web Audio API)
 var isSpeaking       = false;
+var isPaused         = false; // true while in the paused-but-resumable state
 
 // ─── voice catalogue ──────────────────────────────────────────
-// ⚠ ElevenLabs: Replace each FILL_ID_XXXX with the real Voice ID from
-//   elevenlabs.io → Voices → (voice) → click ID to copy.
-//   The entry { id: '6wdSVG3CMjPfAthsnMv9' } is confirmed and ready.
 var VOICE_CATALOGUE = {
   google: [
     { id: 'ja-JP-Chirp3-HD-Aoede',  label: 'Aoede — female'  },
@@ -48,14 +47,14 @@ var VOICE_CATALOGUE = {
     { id: 'ja-JP-Chirp3-HD-Puck',   label: 'Puck — male'     }
   ],
   elevenlabs: [
-    { id: '6wdSVG3CMjPfAthsnMv9', label: 'Makoto — male, narration'              },
-    { id: '3JDquces8E8bkmvbh6Bc', label: 'Otani — male, narration'               },
-    { id: 'Mv8AjrYZCBkdsmDHNwcB', label: 'Ishibashi — male, authoritative'       },
-    { id: 'j210dv0vWm7fCknyQpbA', label: 'Hinata — male, smooth'                 },
-    { id: 'WQz3clzUdMqvBf0jswZQ', label: 'Shizuka — female, storytelling'        },
-    { id: 'bqpOyYNUu11tjjvRUbKn', label: 'Yamato — male, versatile'              },
-    { id: 'b34JylakFZPlGS0BnwyY', label: 'Kenzo — male, professional'            },
-    { id: '8EkOjt4xTPGMclNlh1pk', label: 'Morioki — female, conversational AI'   }
+    { id: '6wdSVG3CMjPfAthsnMv9', label: 'Makoto — male, narration'           },
+    { id: '3JDquces8E8bkmvbh6Bc', label: 'Otani — male, narration'            },
+    { id: 'Mv8AjrYZCBkdsmDHNwcB', label: 'Ishibashi — male, authoritative'    },
+    { id: 'j210dv0vWm7fCknyQpbA', label: 'Hinata — male, smooth'              },
+    { id: 'WQz3clzUdMqvBf0jswZQ', label: 'Shizuka — female, storytelling'     },
+    { id: 'bqpOyYNUu11tjjvRUbKn', label: 'Yamato — male, versatile'           },
+    { id: 'b34JylakFZPlGS0BnwyY', label: 'Kenzo — male, professional'         },
+    { id: '8EkOjt4xTPGMclNlh1pk', label: 'Morioki — female, conversational'   }
   ]
 };
 
@@ -187,32 +186,51 @@ function _fetchGoogle(text) {
 }
 
 function _fetchElevenLabs(text) {
-  if (selectedVoice.indexOf('FILL_ID_') === 0) {
-    return Promise.reject(new Error(
-      'Voice ID not set for ' + selectedVoice.replace('FILL_ID_', '') +
-      '. Copy the ID from elevenlabs.io → Voices and paste it in tts.js.'
-    ));
-  }
-  return fetch(ELEVENLABS_URL + selectedVoice + '?output_format=mp3_22050_32', {
-    method:'POST',
+  return fetch(ELEVENLABS_URL + selectedVoice, {
+    method: 'POST',
     headers: {
-      'Accept':'audio/mpeg',
+      'Accept':       'audio/mpeg',
       'Content-Type': 'application/json',
       'xi-api-key':   ELEVENLABS_KEY
     },
     body: JSON.stringify({
-      text:text,
-      model_id:       ELEVENLABS_MODEL,
+      text:     text,
+      model_id: ELEVENLABS_MODEL,
       voice_settings: {
-        stability: 0.5  // Only stability for v3, values: 0, 0.5, or 1
+        stability:        0.5,
+        similarity_boost: 0.75,
+        style:            0,
+        use_speaker_boost: true
       }
     })
   })
   .then(function(res) {
-    if (!res.ok) throw new Error('ElevenLabs HTTP ' + res.status);
+    if (!res.ok) {
+      // Read the actual error body so the user knows exactly what went wrong
+      return res.text().then(function(body) {
+        var msg = 'ElevenLabs HTTP ' + res.status;
+        try {
+          var json   = JSON.parse(body);
+          var detail = json.detail;
+          if (typeof detail === 'string') {
+            msg = detail;
+          } else if (detail && detail.message) {
+            msg = detail.message;
+          } else if (detail && detail.status) {
+            msg = 'ElevenLabs: ' + detail.status;
+          }
+        } catch (e) {
+          if (body && body.length < 300) msg = body;
+        }
+        throw new Error(msg);
+      });
+    }
     return res.blob();
   })
-  .then(_blobToB64);
+  .then(function(result) {
+    // After the error branch throws, this only runs on success (result is a Blob)
+    return _blobToB64(result);
+  });
 }
 
 function _fetchAudio(text) {
@@ -231,13 +249,70 @@ function prefetchJP(text) {
   });
 }
 
+// ─── Web Audio API — smooth pause/resume ──────────────────────
+// One shared AudioContext for the whole session.
+// Each Audio element gets a MediaElementSourceNode + GainNode wired through it.
+// Fade duration: 80ms — long enough to be smooth, short enough to feel responsive.
+var _audioCtx = null;
+var FADE_MS   = 80;
+
+function _getAudioCtx() {
+  if (!_audioCtx) {
+    try {
+      _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch(e) {
+      return null; // Browser doesn't support Web Audio API — fall back gracefully
+    }
+  }
+  // Resume context if it was suspended (autoplay policy)
+  if (_audioCtx.state === 'suspended') {
+    _audioCtx.resume().catch(function() {});
+  }
+  return _audioCtx;
+}
+
+// Wire an Audio element through a GainNode. Returns the GainNode (or null).
+// NOTE: MediaElementSourceNode can only be created ONCE per HTMLAudioElement,
+// so we store it on the element itself to detect double-wiring.
+function _wireGain(audio) {
+  var ctx = _getAudioCtx();
+  if (!ctx) return null;
+  if (audio._gainNode) return audio._gainNode; // already wired
+  try {
+    var source   = ctx.createMediaElementSource(audio);
+    var gainNode = ctx.createGain();
+    gainNode.gain.setValueAtTime(1, ctx.currentTime);
+    source.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    audio._gainNode = gainNode; // store reference on element
+    return gainNode;
+  } catch(e) {
+    return null;
+  }
+}
+
+// Schedule a linear gain ramp and return a promise that resolves after `ms`.
+function _rampGain(gainNode, from, to, ms) {
+  return new Promise(function(resolve) {
+    if (!gainNode) { resolve(); return; }
+    var ctx = _getAudioCtx();
+    if (!ctx) { resolve(); return; }
+    var now = ctx.currentTime;
+    gainNode.gain.cancelScheduledValues(now);
+    gainNode.gain.setValueAtTime(from, now);
+    gainNode.gain.linearRampToValueAtTime(to, now + ms / 1000);
+    setTimeout(resolve, ms);
+  });
+}
+
 // ─── SVG icons ───────────────────────────────────────────────
 var ICON_PLAY  = '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align:middle"><path d="M8 5v14l11-7z"/></svg>';
 var ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align:middle"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
 
-var pausedAudio  = null;
-var playToken    = 0;
-var _listAudioBtn = null; // currently active list-view button (Google/ElevenLabs)
+var pausedAudio   = null; // Audio element saved while paused
+var pausedGain    = null; // GainNode saved while paused
+var playToken     = 0;
+var _listAudioBtn = null; // currently active list-view button
 
 function _setBtn(icon) {
   ['cardAudioBtn', 'reviewAudioBtn'].forEach(function(id) {
@@ -248,93 +323,190 @@ function _setBtn(icon) {
   });
 }
 
+// Hard-stop everything immediately (used on card navigation)
 function stopAudio() {
   playToken++;
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  if (_listAudioBtn)               { _listAudioBtn.innerHTML = '&#9654;'; _listAudioBtn = null; }
+  if (currentGain) {
+    try { currentGain.gain.cancelScheduledValues(0); currentGain.gain.setValueAtTime(0, 0); } catch(e) {}
+  }
+  if (currentAudio) { try { currentAudio.pause(); } catch(e) {} currentAudio = null; }
+  currentGain = null;
   pausedAudio = null;
+  pausedGain  = null;
   isSpeaking  = false;
+  isPaused    = false;
+  if (_listAudioBtn) { _listAudioBtn.innerHTML = '&#9654;'; _listAudioBtn = null; }
+}
+
+// ─── core play function ───────────────────────────────────────
+// Creates an Audio element from b64, wires it through Web Audio GainNode,
+// fades in, plays, fades out at end. Returns a promise resolving on end/error.
+function _playB64(b64, token, onEnd, onError) {
+  var audio    = new Audio();
+  audio.preload = 'auto';
+  audio.src     = 'data:audio/mp3;base64,' + b64;
+
+  // Wire immediately so GainNode is ready before play()
+  var gain = _wireGain(audio);
+  if (gain) {
+    // Start gain at 0; we'll ramp up once playback actually starts
+    gain.gain.setValueAtTime(0, (_audioCtx && _audioCtx.currentTime) || 0);
+  }
+
+  currentAudio = audio;
+  currentGain  = gain;
+
+  audio.onended = function() {
+    if (currentAudio !== audio) return; // superseded
+    currentAudio = null;
+    currentGain  = null;
+    isSpeaking   = false;
+    isPaused     = false;
+    if (onEnd) onEnd();
+  };
+
+  audio.onerror = function(e) {
+    if (currentAudio !== audio) return;
+    currentAudio = null;
+    currentGain  = null;
+    isSpeaking   = false;
+    isPaused     = false;
+    if (onError) onError(e);
+  };
+
+  audio.oncanplaythrough = function() {
+    if (token !== playToken || currentAudio !== audio) return;
+    var p = audio.play();
+    var doPlay = p && p.then ? p : Promise.resolve();
+    doPlay.then(function() {
+      if (token !== playToken || currentAudio !== audio) return;
+      // Fade in from 0 → 1
+      if (gain) {
+        _rampGain(gain, 0, 1, FADE_MS);
+      }
+    }).catch(function(err) {
+      if (onError) onError(err);
+    });
+  };
+
+  audio.load();
+}
+
+// ─── smooth pause ────────────────────────────────────────────
+// Fades gain 1→0 over FADE_MS then pauses the element.
+// Saves audio+gain into pausedAudio/pausedGain for resume.
+function _doPause(audio, gain, afterPause) {
+  isSpeaking = false;
+  isPaused   = true;
+  _rampGain(gain, 1, 0, FADE_MS).then(function() {
+    if (audio === currentAudio || audio === pausedAudio) {
+      try { audio.pause(); } catch(e) {}
+    }
+    if (afterPause) afterPause();
+  });
+}
+
+// ─── smooth resume ───────────────────────────────────────────
+// Sets gain to 0, calls play(), then ramps 0→1.
+function _doResume(audio, gain, afterResume) {
+  if (gain) {
+    var ctx = _getAudioCtx();
+    if (ctx) gain.gain.setValueAtTime(0, ctx.currentTime);
+  }
+  var p = audio.play();
+  var doPlay = p && p.then ? p : Promise.resolve();
+  doPlay.then(function() {
+    isSpeaking = true;
+    isPaused   = false;
+    if (gain) _rampGain(gain, 0, 1, FADE_MS);
+    if (afterResume) afterResume();
+  }).catch(function() {
+    isSpeaking = false;
+    isPaused   = false;
+    pausedAudio = null;
+    pausedGain  = null;
+    currentAudio = null;
+    currentGain  = null;
+    if (afterResume) afterResume('error');
+  });
 }
 
 // ─── speakJP — word popup + list view ────────────────────────
-// btnEl: the clicked <button> element (list view). Undefined for word popup.
-// With btnEl: supports pause/resume toggle on the same button.
-// Without btnEl: one-shot play (word popup), stops any current audio.
 function speakJP(text, btnEl) {
   var key = _cacheKey(text);
 
   // ── PAUSE (same list button, currently playing) ────────────
   if (btnEl && _listAudioBtn === btnEl && isSpeaking && currentAudio) {
-    currentAudio.pause();
-    pausedAudio  = currentAudio;
+    var _pauseAudio = currentAudio;
+    var _pauseGain  = currentGain;
     currentAudio = null;
-    isSpeaking   = false;
+    currentGain  = null;
     btnEl.innerHTML = '&#9654;';
+    _doPause(_pauseAudio, _pauseGain, function() {
+      pausedAudio = _pauseAudio;
+      pausedGain  = _pauseGain;
+    });
     return Promise.resolve();
   }
 
   // ── RESUME (same list button, currently paused) ────────────
-  if (btnEl && _listAudioBtn === btnEl && pausedAudio && !isSpeaking) {
-    var resuming = pausedAudio;
+  if (btnEl && _listAudioBtn === btnEl && isPaused && pausedAudio) {
+    var resumeAudio = pausedAudio;
+    var resumeGain  = pausedGain;
     pausedAudio  = null;
-    currentAudio = resuming;
-    isSpeaking   = true;
+    pausedGain   = null;
+    currentAudio = resumeAudio;
+    currentGain  = resumeGain;
     btnEl.innerHTML = ICON_PAUSE;
-    return resuming.play().catch(function() {
-      currentAudio = null; isSpeaking = false; btnEl.innerHTML = '&#9654;';
+    _doResume(resumeAudio, resumeGain, function(err) {
+      if (err) { btnEl.innerHTML = '&#9654;'; }
     });
+    return Promise.resolve();
   }
 
-  // ── NEW (different button, or word popup) ─────────────────
-  // Stop whatever is playing
-  if (currentAudio)  { currentAudio.pause(); currentAudio = null; }
-  pausedAudio = null;
-  isSpeaking  = false;
-  _setBtn(ICON_PLAY); // reset card/review btn if it was active
-  // Reset previous list button icon
+  // ── NEW play (different button or word popup) ──────────────
+  // Stop/abandon whatever is playing
+  playToken++;
+  if (currentGain) {
+    try { currentGain.gain.cancelScheduledValues(0); currentGain.gain.setValueAtTime(0, 0); } catch(e) {}
+  }
+  if (currentAudio) { try { currentAudio.pause(); } catch(e) {} }
+  currentAudio = null;
+  currentGain  = null;
+  pausedAudio  = null;
+  pausedGain   = null;
+  isSpeaking   = false;
+  isPaused     = false;
+  _setBtn(ICON_PLAY);
   if (_listAudioBtn && _listAudioBtn !== btnEl) {
     _listAudioBtn.innerHTML = '&#9654;';
   }
   _listAudioBtn = btnEl || null;
 
-  function playFromB64(b64) {
-    return new Promise(function(resolve, reject) {
-      var audio    = new Audio();
-      audio.preload = 'auto';
-      currentAudio  = audio;
-      isSpeaking    = true;
-      if (btnEl) btnEl.innerHTML = ICON_PAUSE;
+  var token = playToken;
 
-      audio.onended = function() {
-        if (currentAudio === audio) currentAudio = null;
-        isSpeaking    = false;
-        pausedAudio   = null;
-        _listAudioBtn = null;
-        if (btnEl) btnEl.innerHTML = '&#9654;';
-        resolve();
-      };
-      audio.onerror = function(e) {
-        if (currentAudio === audio) currentAudio = null;
-        isSpeaking    = false;
-        _listAudioBtn = null;
-        if (btnEl) btnEl.innerHTML = '&#9654;';
-        reject(e);
-      };
-      audio.oncanplaythrough = function() {
-        setTimeout(function() {
-          if (currentAudio === audio) audio.play().catch(reject);
-        }, 80);
-      };
-      audio.src = 'data:audio/mp3;base64,' + b64;
-      audio.load();
+  function startListPlay(b64) {
+    isSpeaking = true;
+    if (btnEl) btnEl.innerHTML = ICON_PAUSE;
+    _playB64(b64, token, function() {
+      // onEnd
+      _listAudioBtn = null;
+      if (btnEl) btnEl.innerHTML = '&#9654;';
+    }, function() {
+      // onError
+      isSpeaking    = false;
+      _listAudioBtn = null;
+      if (btnEl) btnEl.innerHTML = '&#9654;';
     });
   }
 
   return _getAudio(key).then(function(b64) {
-    if (b64) return playFromB64(b64);
+    if (token !== playToken) return;
+    if (b64) { startListPlay(b64); return; }
     return _fetchAudio(text).then(function(b64) {
+      if (token !== playToken) return;
       cacheSet(key, b64);
-      return playFromB64(b64);
+      startListPlay(b64);
     });
   });
 }
@@ -346,83 +518,88 @@ function speakCard() {
   var s   = src[idx];
   if (!s) return;
 
-  // Reset any active list button and its paused state
+  // If a list item is active, kill it cleanly
   if (_listAudioBtn) {
+    playToken++;
+    if (currentGain) {
+      try { currentGain.gain.cancelScheduledValues(0); currentGain.gain.setValueAtTime(0, 0); } catch(e) {}
+    }
+    if (currentAudio) { try { currentAudio.pause(); } catch(e) {} currentAudio = null; }
+    currentGain = null;
+    pausedAudio = null;
+    pausedGain  = null;
+    isSpeaking  = false;
+    isPaused    = false;
     _listAudioBtn.innerHTML = '&#9654;';
     _listAudioBtn = null;
-    pausedAudio   = null; // discard list audio — we're now in card context
   }
 
   // ── PAUSE ─────────────────────────────────────────────────
-  if (isSpeaking) {
+  if (isSpeaking && currentAudio) {
+    var _pauseAudio = currentAudio;
+    var _pauseGain  = currentGain;
+    currentAudio = null;
+    currentGain  = null;
     playToken++;
-    if (currentAudio) {
-      currentAudio.pause();
-      pausedAudio  = currentAudio;
-      currentAudio = null;
-    }
-    isSpeaking = false;
     _setBtn(ICON_PLAY);
+    _doPause(_pauseAudio, _pauseGain, function() {
+      // Only save pausedAudio if nothing new started during the fade
+      if (!isSpeaking) {
+        pausedAudio = _pauseAudio;
+        pausedGain  = _pauseGain;
+        isPaused    = true;
+      } else {
+        try { _pauseAudio.pause(); } catch(e) {}
+      }
+    });
     return;
   }
 
   // ── RESUME ────────────────────────────────────────────────
-  if (pausedAudio) {
-    var resuming = pausedAudio;
+  if (isPaused && pausedAudio) {
+    var resumeAudio = pausedAudio;
+    var resumeGain  = pausedGain;
     pausedAudio  = null;
-    currentAudio = resuming;
-    isSpeaking   = true;
+    pausedGain   = null;
+    currentAudio = resumeAudio;
+    currentGain  = resumeGain;
     _setBtn(ICON_PAUSE);
-    setTimeout(function() {
-      if (currentAudio !== resuming) return;
-      resuming.play().catch(function() {
-        currentAudio = null; isSpeaking = false; _setBtn(ICON_PLAY);
-      });
-    }, 160);
+    _doResume(resumeAudio, resumeGain, function(err) {
+      if (err) { _setBtn(ICON_PLAY); }
+    });
     return;
   }
 
   // ── FRESH PLAY ────────────────────────────────────────────
-  isSpeaking  = true;
-  var token   = ++playToken;
+  isSpeaking = true;
+  isPaused   = false;
+  var token  = ++playToken;
   _setBtn(ICON_PAUSE);
 
   var key = _cacheKey(s.jp);
 
-  function startPlay(b64) {
+  function startCardPlay(b64) {
     if (token !== playToken) return;
-    var audio    = new Audio();
-    audio.preload = 'auto';
-    currentAudio  = audio;
-
-    audio.onended = function() {
-      if (currentAudio === audio) currentAudio = null;
-      isSpeaking  = false;
-      pausedAudio = null;
+    _playB64(b64, token, function() {
+      // onEnd
       _setBtn(ICON_PLAY);
-    };
-    audio.onerror = function() {
-      if (currentAudio === audio) currentAudio = null;
+    }, function(err) {
+      // onError
       isSpeaking = false;
       _setBtn(ICON_PLAY);
-    };
-    audio.oncanplaythrough = function() {
-      setTimeout(function() {
-        if (currentAudio === audio && token === playToken) {
-          audio.play().catch(function() {
-            currentAudio = null; isSpeaking = false; _setBtn(ICON_PLAY);
-          });
-        }
-      }, 80);
-    };
-    audio.src = 'data:audio/mp3;base64,' + b64;
-    audio.load();
+      if (err && err.message) alert('Audio failed: ' + err.message);
+    });
   }
 
   _getAudio(key).then(function(b64) {
-    if (b64) { startPlay(b64); return; }
+    if (token !== playToken) return;
+    if (b64) { startCardPlay(b64); return; }
     _fetchAudio(s.jp)
-      .then(function(b64) { cacheSet(key, b64); startPlay(b64); })
+      .then(function(b64) {
+        if (token !== playToken) return;
+        cacheSet(key, b64);
+        startCardPlay(b64);
+      })
       .catch(function(err) {
         if (token !== playToken) return;
         console.error('TTS error:', err);
@@ -463,7 +640,6 @@ function _renderVoicePanel() {
   var panel = document.getElementById('voicePanel');
   if (!panel) return;
 
-  // Update provider button active states
   document.querySelectorAll('.provider-btn').forEach(function(b) {
     b.classList.toggle('active', b.dataset.provider === selectedProvider);
   });
@@ -491,6 +667,5 @@ function loadVoicePref() {
     if (prov && VOICE_CATALOGUE[prov]) selectedProvider = prov;
     if (voice) selectedVoice = voice;
   } catch(e) {}
-
   _renderVoicePanel();
 }
