@@ -614,41 +614,6 @@ function render() {
   updateLengthFilterBar();
 }
 
-// ─── view mode switching ─────────────────────────────────────
-// Called by the Cards and List buttons in index.html.
-// Replaces the old toggle pattern — each button always does exactly one thing.
-// Also called by storybuilder.js nav interceptors for clean state restoration.
-function setViewMode(mode) {
-  // Exit story mode silently if active (same logic as nav interceptors)
-  if (isStoryMode) {
-    isStoryMode = false;
-    var mainEl = document.querySelector('main');
-    if (mainEl) mainEl.classList.remove('story-active');
-    var ss = document.getElementById('storyScreen');
-    if (ss) ss.style.display = 'none';
-    var sbBtn = document.getElementById('btnStoryBuilder');
-    if (sbBtn) sbBtn.classList.remove('active');
-  }
-
-  isListView   = (mode === 'list');
-  isReviewMode = false;
-
-  // Update active state on both view buttons
-  var cardBtn = document.getElementById('btnCardView');
-  var listBtn = document.getElementById('btnListView');
-  if (cardBtn) cardBtn.classList.toggle('active', !isListView);
-  if (listBtn) listBtn.classList.toggle('active',  isListView);
-
-  // Sync list-view CSS class (needed for .list-view { display:none } → .list-view.active)
-  var listViewEl = document.getElementById('listView');
-  if (listViewEl) listViewEl.classList.toggle('active', isListView);
-
-  // Persist choice so reload restores the right view
-  try { localStorage.setItem('jpStudy_isListView', isListView ? '1' : '0'); } catch(e) {}
-
-  render();
-}
-
 // ─── navigation ──────────────────────────────────────────────
 function prevCard() {
   if (isReviewMode) return;
@@ -668,15 +633,6 @@ loadVoicePref();     // tts.js    — restores selected voice
 loadFuriganaCache(); // load cached furigana readings from localStorage
 updateDeckUI();      // decks.js  — sets deck button label + modal content
 applyViewState();    // ui.js     — syncs DOM to isListView/isReviewMode flags
-
-// Sync the Cards/List button active states on first load.
-// isListView is set by loadUIPrefs() above; we just need to reflect it.
-(function _syncViewBtns() {
-  var cardBtn = document.getElementById('btnCardView');
-  var listBtn = document.getElementById('btnListView');
-  if (cardBtn) cardBtn.classList.toggle('active', !isListView);
-  if (listBtn) listBtn.classList.toggle('active',  isListView);
-})();
 
 if (window.speechSynthesis) { speechSynthesis.onvoiceschanged = function() {}; speechSynthesis.getVoices(); }
 
