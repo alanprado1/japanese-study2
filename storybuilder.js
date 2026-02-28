@@ -265,12 +265,15 @@ function _sbStoriesForGroup(groupType) {
 function enterStoryMode() {
   isStoryMode = true;
 
-  // Hide all standard views and chrome
-  _sbShowEl('storyScreen');
-  _sbHideEl('flashcardView');
-  _sbHideEl('listView');
-  _sbHideEl('statsBar');
-  _sbHideEl('lengthFilterBar');
+  // Add CSS class to <main> — this hides flashcardView, listView, statsBar,
+  // lengthFilterBar via style.css rules (no inline style manipulation so
+  // there's nothing to "forget" to clear when exiting).
+  var mainEl = document.querySelector('main');
+  if (mainEl) mainEl.classList.add('story-active');
+
+  // Show the story screen div itself
+  var ss = document.getElementById('storyScreen');
+  if (ss) ss.style.display = 'block';
 
   // Activate the nav button
   var btn = document.getElementById('btnStoryBuilder');
@@ -296,12 +299,18 @@ function enterStoryMode() {
 function exitStoryMode() {
   isStoryMode = false;
 
-  _sbHideEl('storyScreen');
+  // Remove the CSS class — unhides flashcardView, listView, statsBar, lengthFilterBar
+  var mainEl = document.querySelector('main');
+  if (mainEl) mainEl.classList.remove('story-active');
+
+  // Hide the story screen div itself
+  var ss = document.getElementById('storyScreen');
+  if (ss) ss.style.display = 'none';
 
   var btn = document.getElementById('btnStoryBuilder');
   if (btn) btn.classList.remove('active');
 
-  // render() in app.js restores card or list view correctly
+  // render() in app.js will now show card or list view correctly
   render();
 }
 
@@ -694,6 +703,32 @@ document.addEventListener('keydown', function(e) {
 // sbDeleteStory(storyId)    → delete a story
 // sbGetSentencesByRating()  → { again, hard, good }
 // sbShowToast(msg, ms)      → toast notification
+
+// ─── Nav button interceptors ──────────────────────────────────
+// When the user clicks Cards, List, or Review while story mode is active,
+// these capture-phase listeners run BEFORE ui.js's own handlers.
+// They silently deactivate story mode so that ui.js's handler and the
+// subsequent render() call see a clean non-story state.
+(function _sbWireNavExit() {
+  var navIds = ['btnListView', 'btnCardView', 'btnReviewMode'];
+  for (var n = 0; n < navIds.length; n++) {
+    (function(id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('click', function() {
+        if (typeof isStoryMode === 'undefined' || !isStoryMode) return;
+        // Deactivate story mode — do NOT call render(), ui.js will do it
+        isStoryMode = false;
+        var mainEl = document.querySelector('main');
+        if (mainEl) mainEl.classList.remove('story-active');
+        var ss = document.getElementById('storyScreen');
+        if (ss) ss.style.display = 'none';
+        var sbBtn = document.getElementById('btnStoryBuilder');
+        if (sbBtn) sbBtn.classList.remove('active');
+      }, true); // capture phase — runs before ui.js bubble handlers
+    })(navIds[n]);
+  }
+})();
 
 // ─── Init ─────────────────────────────────────────────────────
 // Restore persisted settings — must run at parse time (before DOM ready)

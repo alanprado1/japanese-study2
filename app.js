@@ -596,6 +596,18 @@ function render() {
     return;
   }
 
+  // Safety net: if story mode is off, ensure its CSS class and overlay
+  // are removed — covers any edge case where isStoryMode was set to false
+  // outside of exitStoryMode() (e.g. the nav button click interceptors).
+  var _mainEl = document.querySelector('main');
+  if (_mainEl && _mainEl.classList.contains('story-active')) {
+    _mainEl.classList.remove('story-active');
+  }
+  var _ss = document.getElementById('storyScreen');
+  if (_ss && _ss.style.display !== 'none') {
+    _ss.style.display = 'none';
+  }
+
   if (isListView) renderListView();
   else            renderCard();
   updateDueBadge();

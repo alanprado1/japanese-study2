@@ -1283,6 +1283,19 @@ input[type=range]::-moz-range-thumb {
    Reader styles will be added in Session C.
    ===================================================== */
 
+/* ── story-active mode flag on <main> ─────────────────
+   When JavaScript adds .story-active to <main>, hide all
+   standard views and let storyScreen take the full column.
+   Using !important so these override any inline display
+   values set by renderCard() / applyViewState() in ui.js.
+   ───────────────────────────────────────────────────── */
+main.story-active > #flashcardView,
+main.story-active > #listView,
+main.story-active > #statsBar,
+main.story-active > #lengthFilterBar {
+  display: none !important;
+}
+
 /* ── Story screen wrapper (inside <main>) ─────────── */
 #storyScreen {
   width: 100%;
