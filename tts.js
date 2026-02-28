@@ -50,15 +50,14 @@ var VOICE_CATALOGUE = {
     { id: 'ja-JP-Chirp3-HD-Puck',   label: 'Puck — male'     }
   ],
   elevenlabs: [
-    { id: '6wdSVG3CMjPfAthsnMv9', label: '(User voice)'                          },
-    { id: 'FILL_ID_OTANI',        label: 'Otani — male, narration'               },
-    { id: 'FILL_ID_KUON',         label: 'Kuon — female, cheerful'               },
-    { id: 'FILL_ID_ISHIBASHI',    label: 'Ishibashi — male, authoritative'       },
-    { id: 'FILL_ID_HINATA',       label: 'Hinata — male, smooth'                 },
-    { id: 'FILL_ID_SHIZUKA',      label: 'Shizuka — female, storytelling'        },
-    { id: 'FILL_ID_YAMATO',       label: 'Yamato — male, versatile'              },
-    { id: 'FILL_ID_KENZO',        label: 'Kenzo — male, professional'            },
-    { id: 'FILL_ID_MORIOKI',      label: 'Morioki — female, conversational AI'   }
+    { id: '6wdSVG3CMjPfAthsnMv9', label: 'Makoto — male, narration'              },
+    { id: '3JDquces8E8bkmvbh6Bc', label: 'Otani — male, narration'               },
+    { id: 'Mv8AjrYZCBkdsmDHNwcB', label: 'Ishibashi — male, authoritative'       },
+    { id: 'j210dv0vWm7fCknyQpbA', label: 'Hinata — male, smooth'                 },
+    { id: 'WQz3clzUdMqvBf0jswZQ', label: 'Shizuka — female, storytelling'        },
+    { id: 'bqpOyYNUu11tjjvRUbKn', label: 'Yamato — male, versatile'              },
+    { id: 'b34JylakFZPlGS0BnwyY', label: 'Kenzo — male, professional'            },
+    { id: '8EkOjt4xTPGMclNlh1pk', label: 'Morioki — female, conversational AI'   }
   ],
   edge: [
     // Populated at runtime by _loadEdgeVoices() from window.speechSynthesis.getVoices()
