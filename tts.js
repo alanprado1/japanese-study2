@@ -26,7 +26,7 @@ var GOOGLE_TTS_URL   = 'https://texttospeech.googleapis.com/v1/text:synthesize?k
 
 var ELEVENLABS_KEY   = '0f0704648329dd39026e88b43e3dc8bc0d9403600d542e8ce6082c31eb0fea79';
 var ELEVENLABS_URL   = 'https://api.elevenlabs.io/v1/text-to-speech/';
-var ELEVENLABS_MODEL = 'eleven_v3';
+var ELEVENLABS_MODEL = 'eleven_multilingual_v2';
 
 // ─── provider & voice state ───────────────────────────────────
 var selectedProvider = 'google';
