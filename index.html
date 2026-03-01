@@ -292,10 +292,10 @@ I've never drunk wine."></textarea>
   </div>
 
   <!-- ===== STORY READER OVERLAY ===== -->
-  <!-- Full-screen reader — populated by storyreader.js (Session C).     -->
-  <div id="storyReaderOverlay" style="display:none">
-    <!-- Session C: page content, navigation, TTS, furigana toggles -->
-  </div>
+  <!-- Full-screen manga-panel reader — populated and opened by storyreader.js -->
+  <!-- JS opens via: overlay.style.display = 'flex'                            -->
+  <!-- JS closes via: overlay.style.display = 'none'                           -->
+  <div id="storyReaderOverlay" style="display:none"></div>
 
   <!-- ===== WORD LOOKUP POPUP ===== -->
   <div class="popup-overlay" id="wordPopup">

@@ -1893,3 +1893,304 @@ main.story-active > #lengthFilterBar {
     pointer-events: all;
   }
 }
+
+/* ============================================================
+   PHASE 4 SESSION C — STORY READER
+   Prefix: sr-
+   All story reader styles isolated here.
+   ============================================================ */
+
+/* ── Overlay container ───────────────────────────────────────
+   Full-screen fixed layer. Flex column so content stacks
+   header → nav → panels. Background image set via JS.      */
+#storyReaderOverlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: 400;
+  display: none;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: hidden;
+  /* When display is set to flex by JS, this kicks in */
+}
+
+/* Dim overlay when a bg image is present */
+#storyReaderOverlay.sr-has-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  opacity: 0.50;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* All direct children sit above the dim layer */
+#storyReaderOverlay > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Scrollable content wrapper ─────────────────────────────*/
+.sr-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px 20px 100px; /* bottom pad for nav bar */
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.sr-content::-webkit-scrollbar       { width: 4px; }
+.sr-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Close button ────────────────────────────────────────────*/
+.sr-close-btn {
+  position: fixed;
+  top: 14px;
+  right: 16px;
+  z-index: 10;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--text2);
+  font-size: 0.82rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.sr-close-btn:hover { background: var(--danger); color: #fff; }
+
+/* ── Title block (first page only) ──────────────────────────*/
+.sr-title-block {
+  text-align: center;
+  padding: 24px 8px 8px;
+}
+.sr-title-ja {
+  font-family: 'Noto Serif JP', serif;
+  font-size: 1.55rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+}
+.sr-title-en {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text3);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-top: 6px;
+}
+
+/* ── Navigation bar ─────────────────────────────────────────*/
+.sr-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0 4px;
+  flex-shrink: 0;
+}
+
+.sr-nav-btn {
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--text2);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.sr-nav-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+.sr-nav-btn:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+.sr-page-counter {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text3);
+  letter-spacing: 0.1em;
+  flex-shrink: 0;
+}
+
+/* Page-level play button */
+.sr-page-audio-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--bg2);
+  color: var(--accent);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.sr-page-audio-btn:hover {
+  background: var(--accent-glow);
+}
+.sr-page-audio-btn.sr-page-audio-playing {
+  background: var(--accent-glow);
+  border-color: var(--accent2);
+  color: var(--accent2);
+}
+
+/* ── Manga panel grid ────────────────────────────────────────
+   2-column grid on desktop, 1-column on mobile.            */
+.sr-panel-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  width: 100%;
+}
+
+/* ── Individual panel ────────────────────────────────────────*/
+.sr-panel {
+  position: relative;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  padding: 16px 14px 40px; /* bottom room for audio button */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.2s;
+}
+
+/* Filler panel — standard */
+.sr-panel-filler {
+  background: var(--bg2);
+}
+
+/* Anchor panel — coloured highlighter background */
+.sr-panel-anchor {
+  background: var(--highlight);
+  border-color: var(--accent);
+}
+
+/* ── Anchor badge (学 kanji in corner) ───────────────────────*/
+.sr-anchor-badge {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-family: 'Noto Serif JP', serif;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+  user-select: none;
+}
+
+/* ── Panel text ──────────────────────────────────────────────*/
+.sr-panel-text {
+  font-family: 'Noto Sans JP', 'Noto Serif JP', sans-serif;
+  font-size: var(--jp-size, 1.4rem);
+  font-weight: var(--jp-weight, 400);
+  color: var(--text);
+  line-height: 1.75;
+  word-break: break-all;
+  flex: 1;
+}
+
+/* Anchor panel text slightly larger to reinforce importance */
+.sr-panel-anchor .sr-panel-text {
+  color: var(--text);
+}
+
+/* Furigana ruby text inside panels */
+.sr-panel-text ruby  { ruby-align: center; }
+.sr-panel-text rt    {
+  font-size: 0.45em;
+  color: var(--text2);
+  font-weight: 400;
+}
+
+/* Clickable word spans inside reader panels */
+.sr-panel-text .jp-word {
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 0.12s;
+}
+.sr-panel-text .jp-word:hover {
+  background: var(--highlight);
+  color: var(--accent2);
+}
+
+/* ── Per-panel audio button ──────────────────────────────────*/
+.sr-panel-audio-btn {
+  position: absolute;
+  bottom: 8px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text3);
+  font-size: 0.65rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  padding: 0;
+  line-height: 1;
+}
+.sr-panel-audio-btn:hover {
+  background: var(--accent-glow);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ── Mobile: single column ────────────────────────────────── */
+@media (max-width: 600px) {
+  .sr-panel-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sr-content {
+    padding: 12px 14px 100px;
+  }
+
+  .sr-nav {
+    gap: 6px;
+  }
+
+  .sr-nav-btn {
+    padding: 6px 10px;
+    font-size: 0.68rem;
+  }
+
+  .sr-page-audio-btn {
+    padding: 5px 10px;
+    font-size: 0.65rem;
+  }
+
+  .sr-title-ja {
+    font-size: 1.2rem;
+  }
+}
