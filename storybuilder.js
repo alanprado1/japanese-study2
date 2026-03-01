@@ -715,39 +715,49 @@ function _sbBuildPrompt(anchors, settings) {
     return (i + 1) + '. ' + s.jp;
   }).join('\n');
 
+  var anchorsPerPage = Math.ceil(anchors.length / settings.totalPages);
+
   return (
     'IMPORTANT: Your entire response must be ONE valid JSON object. ' +
     'No markdown, no code fences (```), no explanation. JSON only.\n\n' +
-    'You are a Japanese story writer creating immersive content for a language learner.\n\n' +
-    'TASK: Write a ' + settings.totalPages + '-page Japanese story that naturally ' +
-    'incorporates the anchor sentences below verbatim (character for character, unchanged).\n\n' +
-    'ANCHOR SENTENCES (copy each one into the story exactly as written):\n' +
+    'You are a Japanese story writer creating study material for a language learner.\n\n' +
+    'CORE PRINCIPLE: The anchor sentences ARE the story. ' +
+    'Filler prose is only short connective tissue — 1 to 2 sentences maximum per filler segment. ' +
+    'The majority of text on every page must be anchor sentences, not filler.\n\n' +
+    'TASK: Write a ' + settings.totalPages + '-page Japanese story using ALL ' + anchors.length + ' anchor sentences below verbatim. ' +
+    'Spread them across pages (~' + anchorsPerPage + ' anchors per page). ' +
+    'Connect them with minimal natural bridging prose.\n\n' +
+    'ANCHOR SENTENCES — use ALL of them, copied exactly character for character:\n' +
     anchorList + '\n\n' +
     'REQUIREMENTS:\n' +
     '- Exactly ' + settings.totalPages + ' pages\n' +
-    '- Each page: approximately ' + settings.charsPerPage + ' Japanese characters of filler prose\n' +
-    '- Filler prose: natural Japanese at the same difficulty level as the anchors\n' +
-    '- Distribute anchor sentences across pages — one anchor per page where possible\n' +
+    '- Every anchor sentence must appear exactly once across all pages\n' +
+    '- Each page must contain ' + anchorsPerPage + ' or more anchor segments\n' +
+    '- Filler segments: SHORT bridging only (1-2 sentences max). Never write long filler paragraphs\n' +
+    '- Never put two filler segments in a row — always separate them with at least one anchor\n' +
+    '- Filler must be natural Japanese at the same difficulty level as the anchors\n' +
     '- "title": a compelling Japanese story title\n' +
     '- "titleEn": an evocative English subtitle\n\n' +
-    'JSON STRUCTURE (return exactly this — every field required):\n' +
+    'JSON STRUCTURE:\n' +
     '{\n' +
     '  "title": "物語のタイトル",\n' +
     '  "titleEn": "English Subtitle Here",\n' +
     '  "pages": [\n' +
     '    {\n' +
     '      "segments": [\n' +
-    '        { "type": "filler", "text": "Japanese narrative prose connecting the story" },\n' +
-    '        { "type": "anchor", "text": "exact anchor sentence verbatim", "anchorIdx": 1 }\n' +
+    '        { "type": "filler", "text": "Short bridge." },\n' +
+    '        { "type": "anchor", "text": "exact anchor verbatim", "anchorIdx": 1 },\n' +
+    '        { "type": "anchor", "text": "exact anchor verbatim", "anchorIdx": 2 },\n' +
+    '        { "type": "filler", "text": "Short bridge." },\n' +
+    '        { "type": "anchor", "text": "exact anchor verbatim", "anchorIdx": 3 }\n' +
     '      ]\n' +
     '    }\n' +
     '  ]\n' +
     '}\n\n' +
     'Segment rules:\n' +
-    '- "filler" segments: your narrative prose (compelling, natural, matches anchor difficulty)\n' +
-    '- "anchor" segments: the anchor sentence copied EXACTLY, with "anchorIdx" set to its number above\n' +
-    '- A page may have only filler if no anchor fits naturally there\n' +
-    '- Do not modify anchor sentences — not even punctuation or spacing\n\n' +
+    '- "filler": short bridging prose only, 1-2 sentences, never two in a row\n' +
+    '- "anchor": copied EXACTLY character for character — do not change anything\n' +
+    '- "anchorIdx": the 1-based number of that anchor from the list above\n\n' +
     'Begin the JSON now:'
   );
 }
@@ -990,10 +1000,13 @@ function _sbRunGeneration(groupType, settings, existingStoryId) {
     return;
   }
 
-  // ── 2. Random subset — ~1.2 anchors per page, min 2, capped at pool ──
+  // ── 2. Anchor selection — pack as many as sensibly fit ──
+  // Target: ~3-5 anchor sentences per page so studied sentences dominate.
+  // Cap at pool size and at a hard max (60) to stay within Gemini's context.
   var numAnchors = Math.min(
     pool.length,
-    Math.max(2, Math.round(settings.totalPages * 1.2))
+    60,
+    Math.max(3, settings.totalPages * 4)
   );
   var shuffled = pool.slice().sort(function() { return Math.random() - 0.5; });
   var anchors  = shuffled.slice(0, numAnchors);
