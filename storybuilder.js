@@ -52,6 +52,19 @@ var _sbCustomAttrs  = { again: false, hard: false, good: false };
 // Which group the user is about to generate a story for
 var _sbPendingGroup = null;
 
+// ─── Session B: generation state ─────────────────────────────
+var GEMINI_KEY = 'AIzaSyCZ8FFfL2OaOZqaiY-qQzIu2yOHvvqUio4';
+var GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + GEMINI_KEY;
+
+// Loading animation
+var _sbGenKanjiChars = ['語','話','文','書','物','夢','旅','星','風','花','心','月'];
+var _sbGenAnimTimer  = null;
+var _sbGenAnimIdx    = 0;
+
+// True while a generation is running — prevents renderStoryScreen() from
+// overwriting the loading / error UI that generation owns.
+var _sbGenerating = false;
+
 // ─── Deterministic story icon ─────────────────────────────────
 function _sbIcon(storyId) {
   var hash = 0, s = String(storyId);
@@ -347,6 +360,9 @@ function renderStoryScreen() {
   var container = document.getElementById('sbGroupsContainer');
   if (!container) return;
 
+  // Session B: generation owns the screen — don't overwrite the loading/error UI
+  if (_sbGenerating) return;
+
   // Deck changed while we were in story mode (e.g. Firebase pull changed currentDeckId)
   if (_sbDeckId !== currentDeckId) {
     _sbDeckId   = currentDeckId;
@@ -536,6 +552,7 @@ function _sbRenderStoryCard(story) {
 
   return '<div class="sb-story-card" onclick="sbReadStory(\'' + sid + '\')" title="' + _sbEsc(title) + '">' +
     '<button class="sb-story-delete" onclick="event.stopPropagation();sbConfirmDelete(\'' + sid + '\')" title="Delete story">✕</button>' +
+    '<button class="sb-story-regen"  onclick="event.stopPropagation();sbRegenerateStory(\'' + sid + '\')" title="Regenerate story">↻</button>' +
     '<div class="sb-story-icon">' + icon + '</div>' +
     '<div class="sb-story-title">' + _sbEsc(title) + '</div>' +
     '<div class="sb-story-meta">' + pages + ' · ' + _sbEsc(date) + '</div>' +
@@ -679,6 +696,381 @@ function sbShowToast(msg, duration) {
     toast.classList.remove('sb-toast-visible');
     setTimeout(function() { if (toast.parentNode) toast.remove(); }, 400);
   }, duration || 2500);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//   SESSION B: AI STORY GENERATION
+//   Gemini 1.5 Flash → parse JSON → Pollinations images → save
+// ═══════════════════════════════════════════════════════════════
+
+// ─── Prompt builder ───────────────────────────────────────────
+function _sbBuildPrompt(anchors, settings) {
+  var anchorList = anchors.map(function(s, i) {
+    return (i + 1) + '. ' + s.jp;
+  }).join('\n');
+
+  return (
+    'IMPORTANT: Your entire response must be ONE valid JSON object. ' +
+    'No markdown, no code fences (```), no explanation. JSON only.\n\n' +
+    'You are a Japanese story writer creating immersive content for a language learner.\n\n' +
+    'TASK: Write a ' + settings.totalPages + '-page Japanese story that naturally ' +
+    'incorporates the anchor sentences below verbatim (character for character, unchanged).\n\n' +
+    'ANCHOR SENTENCES (copy each one into the story exactly as written):\n' +
+    anchorList + '\n\n' +
+    'REQUIREMENTS:\n' +
+    '- Exactly ' + settings.totalPages + ' pages\n' +
+    '- Each page: approximately ' + settings.charsPerPage + ' Japanese characters of filler prose\n' +
+    '- Filler prose: natural Japanese at the same difficulty level as the anchors\n' +
+    '- Distribute anchor sentences across pages — one anchor per page where possible\n' +
+    '- "title": a compelling Japanese story title\n' +
+    '- "titleEn": an evocative English subtitle\n\n' +
+    'JSON STRUCTURE (return exactly this — every field required):\n' +
+    '{\n' +
+    '  "title": "物語のタイトル",\n' +
+    '  "titleEn": "English Subtitle Here",\n' +
+    '  "pages": [\n' +
+    '    {\n' +
+    '      "segments": [\n' +
+    '        { "type": "filler", "text": "Japanese narrative prose connecting the story" },\n' +
+    '        { "type": "anchor", "text": "exact anchor sentence verbatim", "anchorIdx": 1 }\n' +
+    '      ]\n' +
+    '    }\n' +
+    '  ]\n' +
+    '}\n\n' +
+    'Segment rules:\n' +
+    '- "filler" segments: your narrative prose (compelling, natural, matches anchor difficulty)\n' +
+    '- "anchor" segments: the anchor sentence copied EXACTLY, with "anchorIdx" set to its number above\n' +
+    '- A page may have only filler if no anchor fits naturally there\n' +
+    '- Do not modify anchor sentences — not even punctuation or spacing\n\n' +
+    'Begin the JSON now:'
+  );
+}
+
+// ─── Gemini API call ──────────────────────────────────────────
+function _sbCallGemini(prompt) {
+  return fetch(GEMINI_URL, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.85, maxOutputTokens: 8192 }
+    })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    // Surface API-level errors (bad key, quota, etc.) as readable messages
+    if (data.error) {
+      throw new Error('Gemini error ' + data.error.code + ': ' + (data.error.message || JSON.stringify(data.error)));
+    }
+    if (!data.candidates || !data.candidates.length || !data.candidates[0].content) {
+      throw new Error('Unexpected Gemini response:\n' + JSON.stringify(data).slice(0, 400));
+    }
+    return data.candidates[0].content.parts[0].text;
+  });
+}
+
+// ─── Response parser ──────────────────────────────────────────
+// Returns a validated story structure or null on any failure.
+function _sbParseGeminiResponse(rawText, anchors) {
+  if (!rawText || typeof rawText !== 'string') return null;
+
+  // Strip markdown code fences Gemini sometimes emits despite instructions
+  var cleaned = rawText.trim()
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/,      '')
+    .replace(/\s*```$/,      '')
+    .trim();
+
+  try {
+    var parsed = JSON.parse(cleaned);
+
+    // ── Required top-level fields ──
+    if (typeof parsed.title !== 'string' || !parsed.title.trim()) return null;
+    if (!Array.isArray(parsed.pages)     || !parsed.pages.length)  return null;
+
+    // titleEn fallback
+    if (typeof parsed.titleEn !== 'string' || !parsed.titleEn.trim()) {
+      parsed.titleEn = parsed.title;
+    }
+
+    // ── Validate + normalise pages ──
+    for (var i = 0; i < parsed.pages.length; i++) {
+      var page = parsed.pages[i];
+      // Handle Gemini occasionally wrapping segments inside a "page" object differently
+      if (!Array.isArray(page.segments)) {
+        if (Array.isArray(page)) {
+          // Some models return pages as an array-of-segment-arrays
+          parsed.pages[i] = { segments: page };
+          page = parsed.pages[i];
+        } else {
+          return null;
+        }
+      }
+      if (!page.segments.length) return null;
+
+      for (var j = 0; j < page.segments.length; j++) {
+        var seg = page.segments[j];
+        if (typeof seg.text !== 'string' || !seg.text.trim()) return null;
+
+        // Normalise type — anything not 'anchor' becomes 'filler'
+        seg.type = (seg.type === 'anchor') ? 'anchor' : 'filler';
+
+        // Inject sentenceId so Session C can highlight anchor segments
+        if (seg.type === 'anchor' && seg.anchorIdx) {
+          var anchorRef = anchors[parseInt(seg.anchorIdx, 10) - 1];
+          if (anchorRef) seg.sentenceId = String(anchorRef.id);
+        }
+      }
+    }
+
+    return parsed;
+  } catch(e) {
+    return null;
+  }
+}
+
+// ─── Loading UI ───────────────────────────────────────────────
+
+function _sbShowGenLoading(statusText) {
+  _sbStopGenLoading(); // clear any previous interval
+  _sbGenAnimIdx = 0;
+
+  var container = document.getElementById('sbGroupsContainer');
+  if (!container) return;
+
+  container.innerHTML =
+    '<div class="sb-gen-loading" id="sbGenLoadingEl">' +
+      '<div class="sb-gen-kanji" id="sbGenKanjiEl">' + _sbGenKanjiChars[0] + '</div>' +
+      '<div class="sb-gen-status" id="sbGenStatusEl">' + _sbEsc(statusText) + '</div>' +
+    '</div>';
+
+  _sbGenAnimTimer = setInterval(function() {
+    _sbGenAnimIdx = (_sbGenAnimIdx + 1) % _sbGenKanjiChars.length;
+    var el = document.getElementById('sbGenKanjiEl');
+    if (el) el.textContent = _sbGenKanjiChars[_sbGenAnimIdx];
+  }, 160);
+}
+
+function _sbUpdateGenStatus(text) {
+  var el = document.getElementById('sbGenStatusEl');
+  if (el) el.textContent = text;
+}
+
+function _sbStopGenLoading() {
+  if (_sbGenAnimTimer) { clearInterval(_sbGenAnimTimer); _sbGenAnimTimer = null; }
+}
+
+// ─── Error UI ─────────────────────────────────────────────────
+// Shows raw Gemini output inline on the story screen for debugging.
+
+function _sbShowGenError(rawText) {
+  _sbGenerating = false;
+  _sbStopGenLoading();
+
+  var container = document.getElementById('sbGroupsContainer');
+  if (!container) return;
+
+  container.innerHTML =
+    '<div class="sb-gen-error">' +
+      '<div class="sb-gen-error-title">⚠ Generation Failed</div>' +
+      '<div class="sb-gen-error-hint">Raw response from Gemini (for debugging):</div>' +
+      '<pre class="sb-gen-error-raw">' + _sbEsc(rawText || '(no response)') + '</pre>' +
+      '<div class="sb-gen-error-actions">' +
+        '<button class="btn" onclick="renderStoryScreen()">← Back to Stories</button>' +
+      '</div>' +
+    '</div>';
+}
+
+// ─── Silent page image fetcher ────────────────────────────────
+// Reuses Pollinations URL builder + IDB helpers from images.js.
+// Returns a Promise<dataUrl|null> — never rejects.
+
+function _sbFetchPageImage(sentence) {
+  return new Promise(function(resolve) {
+    if (typeof _buildPrimaryUrl !== 'function') { resolve(null); return; }
+
+    var url = _buildPrimaryUrl(sentence);
+    var tid = setTimeout(function() { resolve(null); }, 35000); // 35s hard timeout
+
+    fetch(url)
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.blob();
+      })
+      .then(function(blob) {
+        return new Promise(function(res, rej) {
+          var reader    = new FileReader();
+          reader.onloadend = function() { res(reader.result); };
+          reader.onerror   = rej;
+          reader.readAsDataURL(blob);
+        });
+      })
+      .then(function(dataUrl) {
+        clearTimeout(tid);
+        resolve(dataUrl);
+      })
+      .catch(function() {
+        clearTimeout(tid);
+        resolve(null); // image failure is non-fatal — story still saved
+      });
+  });
+}
+
+// ─── Sequential page image generation ────────────────────────
+// Generates one Ghibli-style image per page, stored in IDB.
+// Status bar updated after each page so the user sees progress.
+
+function _sbGeneratePageImages(story) {
+  // Honour the deck's image-gen toggle (set in deck settings)
+  if (typeof isImageGenEnabled !== 'function' || !isImageGenEnabled()) {
+    return Promise.resolve();
+  }
+
+  var pages = story.pages;
+  var total = pages.length;
+
+  function doPage(idx) {
+    if (idx >= total) return Promise.resolve();
+
+    _sbUpdateGenStatus(
+      'Generating illustration ' + (idx + 1) + '\u00a0/\u00a0' + total + '\u2026'
+    );
+
+    // Use first filler segment text as the image prompt description
+    var descText = story.titleEn || story.title || '';
+    for (var i = 0; i < pages[idx].segments.length; i++) {
+      if (pages[idx].segments[i].type === 'filler') {
+        // Trim to 90 chars — Pollinations prompt cap
+        descText = pages[idx].segments[i].text.slice(0, 90);
+        break;
+      }
+    }
+
+    // Synthetic sentence object matching the shape _buildPrimaryUrl expects
+    var synth = {
+      id: story.id + '_p' + idx,
+      en: descText,
+      jp: descText
+    };
+
+    return _sbFetchPageImage(synth).then(function(dataUrl) {
+      // Store in IDB so Session C reader can retrieve it by key
+      if (dataUrl && typeof _idbSet === 'function') {
+        _idbSet(synth.id, dataUrl);
+      }
+      return doPage(idx + 1);
+    });
+  }
+
+  return doPage(0);
+}
+
+// ─── Main generation entry point ─────────────────────────────
+// Called by sbConfirmGenerate() hook (Session A stub detects this function).
+// Also called by sbRegenerateStory() with an existingStoryId to overwrite.
+
+function _sbRunGeneration(groupType, settings, existingStoryId) {
+
+  // ── 1. Gather anchor pool for this group ──
+  var byRating = sbGetSentencesByRating();
+  var pool     = (groupType === 'custom')
+    ? _sbCustomSentences()
+    : (byRating[groupType] || []);
+
+  if (pool.length < SB_MIN_SENTENCES) {
+    sbShowToast('Not enough rated sentences to generate.', 2500);
+    return;
+  }
+
+  // ── 2. Random subset — ~1.2 anchors per page, min 2, capped at pool ──
+  var numAnchors = Math.min(
+    pool.length,
+    Math.max(2, Math.round(settings.totalPages * 1.2))
+  );
+  var shuffled = pool.slice().sort(function() { return Math.random() - 0.5; });
+  var anchors  = shuffled.slice(0, numAnchors);
+
+  // ── 3. Lock screen: show animated loading ──
+  _sbGenerating = true;
+  _sbShowGenLoading('Contacting Gemini\u2026');
+
+  // ── 4. Build prompt + call API ──
+  var prompt = _sbBuildPrompt(anchors, settings);
+
+  _sbCallGemini(prompt)
+    .then(function(rawText) {
+
+      _sbUpdateGenStatus('Parsing story\u2026');
+
+      // ── 5. Parse + validate ──
+      var parsed = _sbParseGeminiResponse(rawText, anchors);
+
+      if (!parsed) {
+        _sbShowGenError(rawText);
+        return;
+      }
+
+      // ── 6. Build story object ──
+      var storyId = existingStoryId || _sbMakeId();
+      var story = {
+        id:          storyId,
+        deckId:      currentDeckId,
+        groupType:   groupType,
+        title:       parsed.title,
+        titleEn:     parsed.titleEn,
+        generatedAt: Date.now(),
+        anchorIds:   anchors.map(function(s) { return s.id; }),
+        settings:    { totalPages: settings.totalPages, charsPerPage: settings.charsPerPage },
+        pages:       parsed.pages
+      };
+
+      // ── 7. Generate illustrations (blocking — user waits) ──
+      _sbGeneratePageImages(story)
+        .then(function() {
+
+          // ── 8. Save to Firebase + localStorage ──
+          _sbUpdateGenStatus('Saving story\u2026');
+
+          sbSaveStory(story)
+            .then(function() {
+              _sbGenerating = false;
+              _sbStopGenLoading();
+              sbShowToast('\u2736 Story generated!', 2800);
+              // Re-render only if the user is still on the story screen
+              if (typeof isStoryMode !== 'undefined' && isStoryMode) {
+                renderStoryScreen();
+              }
+            })
+            .catch(function(err) {
+              _sbShowGenError(
+                'Save failed: ' + (err && err.message ? err.message : String(err))
+              );
+            });
+        });
+    })
+    .catch(function(err) {
+      _sbShowGenError(err && err.message ? err.message : String(err));
+    });
+}
+
+// ─── Public: Regenerate an existing story ────────────────────
+// Overwrites the story in-place (same ID → same card position in the UI).
+
+function sbRegenerateStory(storyId) {
+  var story = _sbStories[storyId];
+  if (!story) { sbShowToast('Story not found.', 2000); return; }
+
+  if (!confirm(
+    'Regenerate \u300c' + (story.title || 'this story') + '\u300d?\n' +
+    'This will overwrite the current version.'
+  )) return;
+
+  // Re-use the original settings if available, otherwise fall back to current modal settings
+  var settings = (story.settings && story.settings.totalPages)
+    ? { totalPages: story.settings.totalPages, charsPerPage: story.settings.charsPerPage }
+    : Object.assign({}, _sbGenSettings);
+
+  _sbRunGeneration(story.groupType, settings, storyId);
 }
 
 // ─── Keyboard shortcut ────────────────────────────────────────

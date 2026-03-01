@@ -1733,6 +1733,126 @@ main.story-active > #lengthFilterBar {
   transform: translateX(-50%) translateY(0);
 }
 
+/* ── Regenerate button on story cards ─────────────────────────
+   Sits to the left of the delete button (top-right area).
+   Appears on hover (like delete), accent-coloured.           */
+.sb-story-regen {
+  position: absolute;
+  top: 6px;
+  right: 32px; /* delete is at right:6px, regen is 26px further left */
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+  background: var(--bg2);
+  color: var(--accent);
+  font-size: 0.82rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, transform 0.15s;
+  z-index: 2;
+  line-height: 1;
+  padding: 0;
+}
+.sb-story-card:hover .sb-story-regen {
+  opacity: 1;
+}
+.sb-story-regen:hover {
+  background: var(--accent-glow);
+  transform: rotate(30deg);
+}
+/* Touch devices: always show both action buttons */
+@media (hover: none) {
+  .sb-story-regen { opacity: 1; }
+}
+
+/* ── Generation loading state ──────────────────────────────── */
+.sb-gen-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  gap: 22px;
+  min-height: 220px;
+}
+
+/* Large kanji that pulses while characters cycle via JS */
+.sb-gen-kanji {
+  font-family: 'Noto Serif JP', 'Noto Sans JP', serif;
+  font-size: 5rem;
+  font-weight: 300;
+  color: var(--accent);
+  display: inline-block;
+  line-height: 1;
+  animation: sb-gen-pulse 0.95s ease-in-out infinite;
+  will-change: transform, opacity;
+  user-select: none;
+}
+
+@keyframes sb-gen-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.90); }
+  50%       { opacity: 1;    transform: scale(1.08); }
+}
+
+.sb-gen-status {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.76rem;
+  color: var(--text2);
+  letter-spacing: 0.07em;
+  text-align: center;
+  max-width: 320px;
+}
+
+/* ── Generation error state ────────────────────────────────── */
+.sb-gen-error {
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sb-gen-error-title {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--danger);
+  letter-spacing: 0.05em;
+}
+
+.sb-gen-error-hint {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.70rem;
+  color: var(--text3);
+  letter-spacing: 0.03em;
+}
+
+.sb-gen-error-raw {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 16px;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.67rem;
+  color: var(--text2);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 280px;
+  overflow-y: auto;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.sb-gen-error-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 /* ── Story reader overlay stub (Session C fills this in) ── */
 #storyReaderOverlay {
   position: fixed;
