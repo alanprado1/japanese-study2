@@ -53,7 +53,7 @@ var _sbCustomAttrs  = { again: false, hard: false, good: false };
 var _sbPendingGroup = null;
 
 // ─── Session B: generation state ─────────────────────────────
-var GEMINI_KEY = 'AIzaSyCZ8FFfL2OaOZqaiY-qQzIu2yOHvvqUio4';
+var GEMINI_KEY = 'AIzaSyAYAbVhOh3OnOiKYU6RpYNRDR-SyjQBzRs';
 var GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + GEMINI_KEY;
 
 // Loading animation
