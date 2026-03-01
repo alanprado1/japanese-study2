@@ -11,7 +11,7 @@
  * Deployed URL example: https://jpStudy-gemini.YOUR-SUBDOMAIN.workers.dev
  */
 
-const GEMINI_MODEL = 'gemini-2.5-flash-preview-04-17';
+const GEMINI_MODEL = 'gemini-2.5-pro-preview-05-06';
 const GEMINI_API   = 'https://generativelanguage.googleapis.com/v1beta/models/' +
                      GEMINI_MODEL + ':generateContent';
 
