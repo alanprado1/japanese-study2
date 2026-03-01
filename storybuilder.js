@@ -53,8 +53,10 @@ var _sbCustomAttrs  = { again: false, hard: false, good: false };
 var _sbPendingGroup = null;
 
 // ─── Session B: generation state ─────────────────────────────
-var GEMINI_KEY = 'AIzaSyAYAbVhOh3OnOiKYU6RpYNRDR-SyjQBzRs';
-var GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + GEMINI_KEY;
+// Gemini calls are proxied through a Cloudflare Worker so the API key
+// never appears in frontend code. Replace this URL after deploying the
+// worker (see gemini-proxy/worker.js for setup instructions).
+var GEMINI_PROXY_URL = 'https://jpstudy-gemini.jpstudy.workers.dev/generate'; 
 
 // Loading animation
 var _sbGenKanjiChars = ['語','話','文','書','物','夢','旅','星','風','花','心','月'];
@@ -750,26 +752,28 @@ function _sbBuildPrompt(anchors, settings) {
   );
 }
 
-// ─── Gemini API call ──────────────────────────────────────────
+// ─── Gemini API call (via proxy) ─────────────────────────────
+// The proxy (Cloudflare Worker) holds the API key server-side.
+// We send only the prompt; the proxy forwards it to Gemini and returns { text }.
 function _sbCallGemini(prompt) {
-  return fetch(GEMINI_URL, {
+  return fetch(GEMINI_PROXY_URL, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.85, maxOutputTokens: 8192 }
+      prompt:          prompt,
+      temperature:     0.85,
+      maxOutputTokens: 8192
     })
   })
   .then(function(r) { return r.json(); })
   .then(function(data) {
-    // Surface API-level errors (bad key, quota, etc.) as readable messages
     if (data.error) {
-      throw new Error('Gemini error ' + data.error.code + ': ' + (data.error.message || JSON.stringify(data.error)));
+      throw new Error(data.error);
     }
-    if (!data.candidates || !data.candidates.length || !data.candidates[0].content) {
-      throw new Error('Unexpected Gemini response:\n' + JSON.stringify(data).slice(0, 400));
+    if (!data.text) {
+      throw new Error('Unexpected proxy response:\n' + JSON.stringify(data).slice(0, 400));
     }
-    return data.candidates[0].content.parts[0].text;
+    return data.text;
   });
 }
 

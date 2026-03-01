@@ -1,0 +1,6 @@
+name = "jpstudy-gemini"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# No routes needed — Cloudflare auto-assigns a workers.dev URL.
+# Once deployed, copy the URL into storybuilder.js as GEMINI_PROXY_URL.
