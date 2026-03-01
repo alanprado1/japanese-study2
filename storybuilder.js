@@ -1000,7 +1000,7 @@ function _sbRunGeneration(groupType, settings, existingStoryId) {
 
   // ── 3. Lock screen: show animated loading ──
   _sbGenerating = true;
-  _sbShowGenLoading('Contacting Gemini\u2026');
+  _sbShowGenLoading('Generating\u2026');
 
   // ── 4. Build prompt + call API ──
   var prompt = _sbBuildPrompt(anchors, settings);
