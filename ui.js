@@ -25,6 +25,10 @@ function applyViewState() {
     btnCard.style.display = 'none';
     statsBar.style.display = sentences.length ? 'flex' : 'none';
   }
+
+  // Sync Cards/List button highlights for the current mode.
+  // Guard with typeof — applyViewState() can fire before app.js is parsed.
+  if (typeof syncViewBtnActive === 'function') syncViewBtnActive();
 }
 
 // ─── themes ──────────────────────────────────────────────────

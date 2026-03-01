@@ -631,10 +631,14 @@ function sbSetDensity(chars) {
 function sbConfirmGenerate() {
   if (!_sbPendingGroup) return;
 
+  // Capture groupType NOW — sbCloseGenModal() sets _sbPendingGroup = null,
+  // so reading _sbPendingGroup after that call would pass null to _sbRunGeneration.
+  var groupType = _sbPendingGroup;
+
   // Session B hook: if _sbRunGeneration is defined, delegate to it.
   if (typeof _sbRunGeneration === 'function') {
     sbCloseGenModal();
-    _sbRunGeneration(_sbPendingGroup, Object.assign({}, _sbGenSettings));
+    _sbRunGeneration(groupType, Object.assign({}, _sbGenSettings));
     return;
   }
 

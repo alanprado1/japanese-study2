@@ -31,6 +31,11 @@ var currentPageIdx = 0;      // current page index in the reader (Session C)
 // null = show all; otherwise 'SHORT','MEDIUM','LONG','VERY LONG'
 var currentLengthFilter = null;
 
+// Per-filter card position memory.
+// Key: filter value ('SHORT','MEDIUM','LONG','VERY LONG') or 'all' for no filter.
+// When the user switches between filters, their position in each filter is preserved.
+var _filterIndices = {};
+
 var LENGTH_LABELS = ['SHORT', 'MEDIUM', 'LONG', 'VERY LONG'];
 
 function getSentencesForFilter() {
@@ -558,7 +563,16 @@ function toggleLengthPill(key) {
       reviewIdx   = 0;
     }
   } else {
-    currentIdx = 0;
+    // Save current position for the filter we're leaving, restore saved
+    // position for the filter we're entering — so switching back to a
+    // filter you've already browsed resumes exactly where you left off.
+    var oldKey = previousFilter || 'all';
+    var newKey = currentLengthFilter || 'all';
+    _filterIndices[oldKey] = currentIdx;
+    currentIdx = _filterIndices[newKey] || 0;
+    // Clamp in case the filter set shrank since we last visited it
+    var newSet = getSentencesForFilter();
+    if (currentIdx >= newSet.length) currentIdx = Math.max(0, newSet.length - 1);
   }
 
   render();
@@ -585,6 +599,21 @@ function updateLengthFilterBar() {
   });
 }
 
+// ─── view button highlight sync ───────────────────────────────
+// Keeps Cards / List buttons highlighted to reflect the current mode.
+// Rule: Cards or List lit only in their respective modes.
+//       Review mode and Story mode → NEITHER lit.
+// Called from render() (safety net for all code paths) and from
+// applyViewState() in ui.js (covers Review + deck switches).
+function syncViewBtnActive() {
+  var cardBtn = document.getElementById('btnCardView');
+  var listBtn = document.getElementById('btnListView');
+  // In review or story mode, neither button should appear selected
+  var inCardOrList = !isReviewMode && !isStoryMode;
+  if (cardBtn) cardBtn.classList.toggle('active', inCardOrList && !isListView);
+  if (listBtn) listBtn.classList.toggle('active', inCardOrList && isListView);
+}
+
 // ─── main render ─────────────────────────────────────────────
 function render() {
   // Story mode owns the screen — delegate to storybuilder.js
@@ -592,6 +621,7 @@ function render() {
   // We return early so stats bar, filter bar, and card/list views
   // are not touched while the story screen is displayed.
   if (isStoryMode) {
+    syncViewBtnActive(); // clear both buttons in story mode
     if (typeof renderStoryScreen === 'function') renderStoryScreen();
     return;
   }
@@ -607,6 +637,8 @@ function render() {
   if (_ss && _ss.style.display !== 'none') {
     _ss.style.display = 'none';
   }
+
+  syncViewBtnActive(); // sync Cards/List highlight for card, list, review modes
 
   if (isListView) renderListView();
   else            renderCard();
@@ -633,12 +665,6 @@ function setViewMode(mode) {
   isListView   = (mode === 'list');
   isReviewMode = false;
 
-  // Update active state on both view buttons
-  var cardBtn = document.getElementById('btnCardView');
-  var listBtn = document.getElementById('btnListView');
-  if (cardBtn) cardBtn.classList.toggle('active', !isListView);
-  if (listBtn) listBtn.classList.toggle('active',  isListView);
-
   // Sync list-view CSS class (needed for .list-view { display:none } → .list-view.active)
   var listViewEl = document.getElementById('listView');
   if (listViewEl) listViewEl.classList.toggle('active', isListView);
@@ -646,7 +672,7 @@ function setViewMode(mode) {
   // Persist choice so reload restores the right view
   try { localStorage.setItem('jpStudy_isListView', isListView ? '1' : '0'); } catch(e) {}
 
-  render();
+  render(); // render() calls syncViewBtnActive() — one source of truth for button highlights
 }
 
 // ─── navigation ──────────────────────────────────────────────
@@ -671,12 +697,7 @@ applyViewState();    // ui.js     — syncs DOM to isListView/isReviewMode flags
 
 // Sync the Cards/List button active states on first load.
 // isListView is set by loadUIPrefs() above; we just need to reflect it.
-(function _syncViewBtns() {
-  var cardBtn = document.getElementById('btnCardView');
-  var listBtn = document.getElementById('btnListView');
-  if (cardBtn) cardBtn.classList.toggle('active', !isListView);
-  if (listBtn) listBtn.classList.toggle('active',  isListView);
-})();
+syncViewBtnActive();
 
 if (window.speechSynthesis) { speechSynthesis.onvoiceschanged = function() {}; speechSynthesis.getVoices(); }
 
