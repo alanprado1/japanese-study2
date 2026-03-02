@@ -621,7 +621,7 @@ main {
 .popup-overlay {
   position: fixed;
   inset: 0;
-  z-index: 500;
+  z-index: 200;
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
   display: none;
@@ -1853,261 +1853,43 @@ main.story-active > #lengthFilterBar {
   flex-wrap: wrap;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   STORY READER — two-column grid layout
-   Left cell:  image panel  (.sr-image-cell)
-   Right cell: text panel   (.sr-text-cell)
-   No z-index tricks, no absolute-positioned backgrounds.
-   ═══════════════════════════════════════════════════════════ */
-
+/* ── Story reader overlay stub (Session C fills this in) ── */
 #storyReaderOverlay {
   position: fixed;
   inset: 0;
   background: var(--bg);
   z-index: 400;
-  display: none;      /* JS sets 'flex' to open */
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* ── Outer grid ──────────────────────────────────────────────
-   Two columns: image | text
-   Image column is fixed-width; text column takes the rest.   */
-.sr-grid {
-  display: grid;
-  grid-template-columns: 420px 1fr;
-  height: 100%;
-  overflow: hidden;
-}
-
-/* ── Image cell ──────────────────────────────────────────────*/
-.sr-image-cell {
-  position: relative;
-  overflow: hidden;
-  background: var(--bg2);
-}
-
-/* Placeholder — always visible until a real image loads */
-.sr-image-placeholder {
-  position: absolute;
-  inset: 0;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
-  background:
-    radial-gradient(ellipse at 30% 40%, var(--accent-glow) 0%, transparent 60%),
-    linear-gradient(160deg, var(--bg2) 0%, var(--bg3) 100%);
-}
-.sr-image-placeholder span {
-  font-size: 5rem;
-  color: var(--border);
-  opacity: 0.35;
-  font-family: 'Noto Sans JP', sans-serif;
-  user-select: none;
-}
-
-/* Real image — fills the cell, hidden until loaded */
-.sr-image {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0;
-  transition: opacity 0.4s ease;
-}
-.sr-image.sr-image-loaded {
-  opacity: 1;
-}
-
-/* ── Text cell ───────────────────────────────────────────────
-   Scrollable column on the right.                            */
-.sr-text-cell {
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  overflow-x: hidden;
-  background: var(--bg);
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-}
-.sr-text-cell::-webkit-scrollbar       { width: 4px; }
-.sr-text-cell::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-/* ── Close button ────────────────────────────────────────────*/
-.sr-close-btn {
-  position: fixed;
-  top: 10px;
-  left: 12px;
-  z-index: 410;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--bg2);
-  color: var(--text2);
+  color: var(--text3);
+  font-family: 'DM Mono', monospace;
   font-size: 0.8rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s, color 0.15s;
-}
-.sr-close-btn:hover { background: var(--danger); color: #fff; }
-
-/* ── Title block ─────────────────────────────────────────────*/
-.sr-title-block {
-  text-align: center;
-  padding: 20px 50px 10px;
-  flex-shrink: 0;
-}
-.sr-title-ja {
-  font-family: 'Noto Serif JP', serif;
-  font-size: 1.4rem;
-  font-weight: 600;
-  color: var(--text);
   letter-spacing: 0.06em;
-  line-height: 1.4;
-}
-.sr-title-en {
-  font-family: 'DM Mono', monospace;
-  font-size: 0.68rem;
-  color: var(--text3);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  margin-top: 4px;
 }
 
-/* ── Navigation bar ──────────────────────────────────────────*/
-.sr-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px 6px;
-  flex-shrink: 0;
-}
-.sr-nav-btn {
-  padding: 6px 14px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg2);
-  color: var(--text2);
-  font-family: 'DM Mono', monospace;
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
-}
-.sr-nav-btn:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-glow);
-}
-.sr-nav-btn:disabled { opacity: 0.25; cursor: default; }
-.sr-page-counter {
-  font-family: 'DM Mono', monospace;
-  font-size: 0.72rem;
-  color: var(--text3);
-  letter-spacing: 0.1em;
-}
-
-/* ── Story body ──────────────────────────────────────────────*/
-.sr-story-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 16px 20px;
-  box-sizing: border-box;
-}
-
-/* ── Segments ────────────────────────────────────────────────*/
-.sr-seg {
-  position: relative;
-  border-radius: 8px;
-  padding: 12px 44px 12px 14px;
-}
-.sr-seg-filler {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-}
-.sr-seg-filler .sr-seg-text { color: #d96c6c; }
-[data-theme="light"] .sr-seg-filler .sr-seg-text { color: #cc3333; }
-.sr-seg-anchor {
-  background: var(--highlight);
-  border: 1px solid var(--accent);
-}
-.sr-seg-anchor .sr-seg-text { color: var(--text); }
-.sr-seg-text {
-  font-family: 'Noto Sans JP', 'Noto Serif JP', sans-serif;
-  font-size: var(--jp-size, 1.4rem);
-  font-weight: var(--jp-weight, 400);
-  line-height: 1.8;
-  word-break: break-all;
-}
-.sr-seg-text ruby { ruby-align: center; }
-.sr-seg-text rt   { font-size: 0.42em; color: var(--text2); font-weight: 400; }
-.sr-seg-text .jp-word { cursor: pointer; border-radius: 2px; transition: background 0.12s; }
-.sr-seg-text .jp-word:hover    { background: var(--highlight); }
-.sr-seg-text .jp-word.selected { background: var(--accent); color: var(--bg); }
-
-/* ── Per-segment audio button ────────────────────────────────*/
-.sr-seg-audio-btn {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--bg3);
-  color: var(--text3);
-  font-size: 0.6rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-.sr-seg-audio-btn:hover {
-  background: var(--accent-glow);
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-/* ── Bottom bar ──────────────────────────────────────────────*/
-.sr-bottom-bar {
-  flex-shrink: 0;
-  display: flex;
-  justify-content: center;
-  padding: 14px 16px 20px;
-  border-top: 1px solid var(--border);
-  background: var(--bg2);
-}
-.sr-page-audio-btn {
-  padding: 8px 24px;
-  border-radius: 8px;
-  border: 1px solid var(--accent);
-  background: var(--bg3);
-  color: var(--accent);
-  font-family: 'DM Mono', monospace;
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.sr-page-audio-btn:hover { background: var(--accent-glow); }
-
-/* ── Mobile ─────────────────────────────────────────────────────*/
+/* ── Responsive — mobile ──────────────────────────── */
 @media (max-width: 600px) {
-  .sr-grid           { grid-template-columns: 1fr; grid-template-rows: 240px 1fr; }
-  .sr-image-cell     { height: 240px; }
-  .sr-story-body     { padding: 12px 14px; gap: 12px; }
-  .sr-seg            { padding: 10px 40px 10px 12px; }
-  .sr-nav            { padding: 8px 12px 4px; gap: 8px; }
-  .sr-nav-btn        { padding: 5px 10px; font-size: 0.68rem; }
-  .sr-title-ja       { font-size: 1.15rem; }
+  .sb-group { padding: 16px 14px 14px; }
+  .sb-screen-header { gap: 12px; }
+  .sb-screen-title-main { font-size: 1.15rem; }
+
+  /* Horizontal scroll on card rows — prevents row from expanding page width */
+  .sb-card-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    /* Hide scrollbar but keep function */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    -webkit-overflow-scrolling: touch;
+  }
+  .sb-card-row::-webkit-scrollbar { height: 4px; }
+  .sb-card-row::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* On mobile the delete button is always visible at reduced opacity */
+  .sb-story-delete {
+    opacity: 0.55;
+    pointer-events: all;
+  }
 }

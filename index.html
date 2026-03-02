@@ -266,16 +266,6 @@ I've never drunk wine."></textarea>
         <div class="sb-slider-hints"><span>1</span><span>20</span></div>
       </div>
 
-      <!-- Anchor % slider -->
-      <div class="settings-row" style="margin-top:16px">
-        <div class="settings-label">
-          Anchor % <span id="sbAnchorPctVal">70</span>%
-        </div>
-        <input type="range" id="sbAnchorPctSlider" min="10" max="90" step="5" value="70"
-               oninput="sbUpdateAnchorPct(this.value)">
-        <div class="sb-slider-hints"><span>10% filler-heavy</span><span>90% anchor-heavy</span></div>
-      </div>
-
       <!-- Page density / length -->
       <div class="settings-row" style="margin-top:16px">
         <div class="settings-label">Page length</div>
@@ -291,8 +281,7 @@ I've never drunk wine."></textarea>
 
       <div class="modal-hint" style="margin-top:12px">
         Anchor sentences from your rated cards appear verbatim in the story.
-        Anchor % controls how much of the story is your studied sentences vs AI filler.
-        Pages auto-adjust if you have fewer sentences than pages selected.
+        AI-generated filler connects them into a cohesive narrative.
       </div>
 
       <div class="modal-actions" style="margin-top:20px">
@@ -303,10 +292,10 @@ I've never drunk wine."></textarea>
   </div>
 
   <!-- ===== STORY READER OVERLAY ===== -->
-  <!-- Full-screen manga-panel reader — populated and opened by storyreader.js -->
-  <!-- JS opens via: overlay.style.display = 'flex'                            -->
-  <!-- JS closes via: overlay.style.display = 'none'                           -->
-  <div id="storyReaderOverlay" style="display:none"></div>
+  <!-- Full-screen reader — populated by storyreader.js (Session C).     -->
+  <div id="storyReaderOverlay" style="display:none">
+    <!-- Session C: page content, navigation, TTS, furigana toggles -->
+  </div>
 
   <!-- ===== WORD LOOKUP POPUP ===== -->
   <div class="popup-overlay" id="wordPopup">

@@ -44,7 +44,7 @@ var _sbDeckId       = null;  // which deck's stories are currently loaded
 var _sbLoading      = false; // Firebase load in progress
 
 // Generation settings — persisted to localStorage
-var _sbGenSettings  = { totalPages: 5, charsPerPage: 120, anchorPct: 70 };
+var _sbGenSettings  = { totalPages: 5, charsPerPage: 120 };
 
 // Custom group — which SRS ratings to include
 var _sbCustomAttrs  = { again: false, hard: false, good: false };
@@ -601,24 +601,9 @@ function sbOpenGenModal(groupType) {
     b.classList.toggle('active', parseInt(b.dataset.chars, 10) === _sbGenSettings.charsPerPage);
   }
 
-  // Restore anchor % slider
-  var anchorSlider = document.getElementById('sbAnchorPctSlider');
-  var anchorVal    = document.getElementById('sbAnchorPctVal');
-  if (anchorSlider) {
-    anchorSlider.value = _sbGenSettings.anchorPct;
-    if (anchorVal) anchorVal.textContent = _sbGenSettings.anchorPct;
-  }
-
   // Show modal
   var overlay = document.getElementById('sbGenModal');
   if (overlay) overlay.classList.add('active');
-}
-
-function sbUpdateAnchorPct(val) {
-  _sbGenSettings.anchorPct = parseInt(val, 10);
-  var el = document.getElementById('sbAnchorPctVal');
-  if (el) el.textContent = val;
-  try { localStorage.setItem('jpStudy_sbGenSettings', JSON.stringify(_sbGenSettings)); } catch(e) {}
 }
 
 function sbCloseGenModal() {
@@ -730,50 +715,39 @@ function _sbBuildPrompt(anchors, settings) {
     return (i + 1) + '. ' + s.jp;
   }).join('\n');
 
-  var anchorsPerPage = Math.ceil(anchors.length / settings.totalPages);
-
   return (
     'IMPORTANT: Your entire response must be ONE valid JSON object. ' +
     'No markdown, no code fences (```), no explanation. JSON only.\n\n' +
-    'You are a Japanese story writer creating study material for a language learner.\n\n' +
-    'CORE PRINCIPLE: The anchor sentences ARE the story. ' +
-    'Filler prose is only short connective tissue — 1 to 2 sentences maximum per filler segment. ' +
-    'The majority of text on every page must be anchor sentences, not filler.\n\n' +
-    'TASK: Write a ' + settings.totalPages + '-page Japanese story using ALL ' + anchors.length + ' anchor sentences below verbatim. ' +
-    'Roughly ' + (settings.anchorPct || 70) + '% of all segments should be anchor segments. ' +
-    'Spread them across pages (~' + anchorsPerPage + ' anchors per page). ' +
-    'Connect them with minimal natural bridging prose.\n\n' +
-    'ANCHOR SENTENCES — use ALL of them, copied exactly character for character:\n' +
+    'You are a Japanese story writer creating immersive content for a language learner.\n\n' +
+    'TASK: Write a ' + settings.totalPages + '-page Japanese story that naturally ' +
+    'incorporates the anchor sentences below verbatim (character for character, unchanged).\n\n' +
+    'ANCHOR SENTENCES (copy each one into the story exactly as written):\n' +
     anchorList + '\n\n' +
     'REQUIREMENTS:\n' +
     '- Exactly ' + settings.totalPages + ' pages\n' +
-    '- Every anchor sentence must appear exactly once across all pages\n' +
-    '- Each page should have roughly ' + anchorsPerPage + ' anchor segments (' + (settings.anchorPct || 70) + '% anchor target)\n' +
-    '- Filler segments: SHORT bridging only (1-2 sentences max). Never write long filler paragraphs\n' +
-    '- Never put two filler segments in a row — always separate them with at least one anchor\n' +
-    '- Filler must be natural Japanese at the same difficulty level as the anchors\n' +
+    '- Each page: approximately ' + settings.charsPerPage + ' Japanese characters of filler prose\n' +
+    '- Filler prose: natural Japanese at the same difficulty level as the anchors\n' +
+    '- Distribute anchor sentences across pages — one anchor per page where possible\n' +
     '- "title": a compelling Japanese story title\n' +
     '- "titleEn": an evocative English subtitle\n\n' +
-    'JSON STRUCTURE:\n' +
+    'JSON STRUCTURE (return exactly this — every field required):\n' +
     '{\n' +
     '  "title": "物語のタイトル",\n' +
     '  "titleEn": "English Subtitle Here",\n' +
     '  "pages": [\n' +
     '    {\n' +
     '      "segments": [\n' +
-    '        { "type": "filler", "text": "Short bridge." },\n' +
-    '        { "type": "anchor", "text": "exact anchor verbatim", "anchorIdx": 1 },\n' +
-    '        { "type": "anchor", "text": "exact anchor verbatim", "anchorIdx": 2 },\n' +
-    '        { "type": "filler", "text": "Short bridge." },\n' +
-    '        { "type": "anchor", "text": "exact anchor verbatim", "anchorIdx": 3 }\n' +
+    '        { "type": "filler", "text": "Japanese narrative prose connecting the story" },\n' +
+    '        { "type": "anchor", "text": "exact anchor sentence verbatim", "anchorIdx": 1 }\n' +
     '      ]\n' +
     '    }\n' +
     '  ]\n' +
     '}\n\n' +
     'Segment rules:\n' +
-    '- "filler": short bridging prose only, 1-2 sentences, never two in a row\n' +
-    '- "anchor": copied EXACTLY character for character — do not change anything\n' +
-    '- "anchorIdx": the 1-based number of that anchor from the list above\n\n' +
+    '- "filler" segments: your narrative prose (compelling, natural, matches anchor difficulty)\n' +
+    '- "anchor" segments: the anchor sentence copied EXACTLY, with "anchorIdx" set to its number above\n' +
+    '- A page may have only filler if no anchor fits naturally there\n' +
+    '- Do not modify anchor sentences — not even punctuation or spacing\n\n' +
     'Begin the JSON now:'
   );
 }
@@ -788,7 +762,7 @@ function _sbCallGemini(prompt) {
     body: JSON.stringify({
       prompt:          prompt,
       temperature:     0.85,
-      maxOutputTokens: 16384
+      maxOutputTokens: 8192
     })
   })
   .then(function(r) { return r.json(); })
@@ -955,10 +929,10 @@ function _sbFetchPageImage(sentence) {
 // Status bar updated after each page so the user sees progress.
 
 function _sbGeneratePageImages(story) {
-  // Story illustrations always generate — they are part of the story itself,
-  // not the same as card images. The deck imageGen toggle is for card view only.
-  // The reader falls back to direct Pollinations URLs if images are missing,
-  // but pre-generating here gives instant display without a live API call.
+  // Honour the deck's image-gen toggle (set in deck settings)
+  if (typeof isImageGenEnabled !== 'function' || !isImageGenEnabled()) {
+    return Promise.resolve();
+  }
 
   var pages = story.pages;
   var total = pages.length;
@@ -1016,24 +990,10 @@ function _sbRunGeneration(groupType, settings, existingStoryId) {
     return;
   }
 
-  // ── 2. Auto-adjust page count if pool is too small ──
-  // Each page needs at least 1 anchor. If fewer sentences than pages, shrink pages.
-  var autoPages = Math.min(settings.totalPages, pool.length);
-  if (autoPages < settings.totalPages) {
-    settings = Object.assign({}, settings, { totalPages: autoPages });
-    sbShowToast('Pages reduced to ' + autoPages + ' to match available sentences.', 3000);
-  }
-
-  // ── 3. Anchor selection — driven by anchorPct slider ──
-  // anchorPct = target % of segments that should be anchor sentences.
-  // Estimate total segments per page as ~4 (3 anchor + 1 filler at 70%).
-  // Cap at 60 to avoid Gemini context limits; always at least 2 per page.
-  var pct        = (settings.anchorPct || 70) / 100;
-  var segsPerPage = 4;
+  // ── 2. Random subset — ~1.2 anchors per page, min 2, capped at pool ──
   var numAnchors = Math.min(
     pool.length,
-    60,
-    Math.max(2, Math.round(settings.totalPages * segsPerPage * pct))
+    Math.max(2, Math.round(settings.totalPages * 1.2))
   );
   var shuffled = pool.slice().sort(function() { return Math.random() - 0.5; });
   var anchors  = shuffled.slice(0, numAnchors);
@@ -1190,7 +1150,6 @@ document.addEventListener('keydown', function(e) {
       var ps = JSON.parse(rawSettings);
       if (ps.totalPages   && ps.totalPages >= 1   && ps.totalPages <= 20)   _sbGenSettings.totalPages   = ps.totalPages;
       if (ps.charsPerPage && ps.charsPerPage >= 60 && ps.charsPerPage <= 250) _sbGenSettings.charsPerPage = ps.charsPerPage;
-      if (ps.anchorPct   && ps.anchorPct   >= 10 && ps.anchorPct   <= 100)  _sbGenSettings.anchorPct   = ps.anchorPct;
     }
   } catch(e) {}
 })();
