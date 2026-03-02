@@ -1917,6 +1917,7 @@ main.story-active > #lengthFilterBar {
 /* Placeholder — shown immediately on page render and on fetch failure.
    Gradient + faint 絵 kanji so there's always something visible.        */
 .sr-bg-div.sr-bg-placeholder {
+  z-index: 999;
   background-image:
     radial-gradient(ellipse at 30% 40%, var(--accent-glow) 0%, transparent 60%),
     linear-gradient(160deg, var(--bg2) 0%, var(--bg3) 100%);
