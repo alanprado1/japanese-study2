@@ -138,6 +138,11 @@ function _srLoadBg(story, pageIdx) {
   var bgDiv = document.getElementById('srBgDiv');
   if (!bgDiv) return;
 
+  // ── Show placeholder immediately — visible before any async work ──
+  // This ensures the user always sees something, even if Pollinations
+  // is unreachable or the IDB read takes a moment.
+  bgDiv.classList.add('sr-bg-placeholder');
+
   var idbKey   = story.id + '_p' + pageIdx;
   var storyRef = story;    // closure guard
   var pageRef  = pageIdx;
@@ -150,22 +155,25 @@ function _srLoadBg(story, pageIdx) {
     if (isStale()) return;
     var d = document.getElementById('srBgDiv');
     if (!d) return;
+    d.classList.remove('sr-bg-placeholder', 'sr-bg-loading');
     d.style.backgroundImage = 'url(' + dataUrl + ')';
     d.classList.add('sr-bg-loaded');
   }
 
   function fetchAndApplyUrl(pollinationsUrl) {
     if (isStale()) return;
-    // Show subtle loading pulse while image fetches
     var d = document.getElementById('srBgDiv');
-    if (d) d.classList.add('sr-bg-loading');
+    if (d) {
+      d.classList.remove('sr-bg-placeholder');
+      d.classList.add('sr-bg-loading');
+    }
 
-    var img   = new Image();
+    var img    = new Image();
     img.onload = function() {
       if (isStale()) return;
       var d2 = document.getElementById('srBgDiv');
       if (!d2) return;
-      d2.classList.remove('sr-bg-loading');
+      d2.classList.remove('sr-bg-loading', 'sr-bg-placeholder');
       d2.style.backgroundImage = 'url(' + pollinationsUrl + ')';
       d2.classList.add('sr-bg-loaded');
       // Cache as blob→dataURL in IDB so next view is instant
@@ -176,14 +184,21 @@ function _srLoadBg(story, pageIdx) {
       }
     };
     img.onerror = function() {
+      // Fetch failed — restore placeholder so there's always something visible
       var d2 = document.getElementById('srBgDiv');
-      if (d2) d2.classList.remove('sr-bg-loading');
+      if (d2) {
+        d2.classList.remove('sr-bg-loading');
+        d2.classList.add('sr-bg-placeholder');
+      }
     };
     img.src = pollinationsUrl;
   }
 
   function tryPollinations() {
-    if (typeof _buildPrimaryUrl !== 'function') return;
+    if (typeof _buildPrimaryUrl !== 'function') {
+      // _buildPrimaryUrl unavailable — placeholder stays, nothing more to do
+      return;
+    }
     var descText = story.titleEn || story.title || '';
     var pg = story.pages && story.pages[pageIdx];
     if (pg && pg.segments) {
