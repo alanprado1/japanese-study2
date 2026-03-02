@@ -1853,121 +1853,93 @@ main.story-active > #lengthFilterBar {
   flex-wrap: wrap;
 }
 
-/* story reader overlay — see Session C below */
+/* ═══════════════════════════════════════════════════════════
+   STORY READER — two-column grid layout
+   Left cell:  image panel  (.sr-image-cell)
+   Right cell: text panel   (.sr-text-cell)
+   No z-index tricks, no absolute-positioned backgrounds.
+   ═══════════════════════════════════════════════════════════ */
 
-/* ── Responsive — mobile ──────────────────────────── */
-@media (max-width: 600px) {
-  .sb-group { padding: 16px 14px 14px; }
-  .sb-screen-header { gap: 12px; }
-  .sb-screen-title-main { font-size: 1.15rem; }
-
-  /* Horizontal scroll on card rows — prevents row from expanding page width */
-  .sb-card-row {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 6px;
-    /* Hide scrollbar but keep function */
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
-    -webkit-overflow-scrolling: touch;
-  }
-  .sb-card-row::-webkit-scrollbar { height: 4px; }
-  .sb-card-row::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-  /* On mobile the delete button is always visible at reduced opacity */
-  .sb-story-delete {
-    opacity: 0.55;
-    pointer-events: all;
-  }
-}
-
-/* ============================================================
-   PHASE 4 SESSION C — STORY READER
-   Prefix: sr-
-   ============================================================ */
-
-/* ── Overlay container ───────────────────────────────────────
-   No background-image here — a child div (sr-bg-div) handles
-   the image so there are ZERO CSS cascade conflicts.          */
 #storyReaderOverlay {
   position: fixed;
   inset: 0;
-  background-color: var(--bg);  /* solid fallback colour */
+  background: var(--bg);
   z-index: 400;
-  display: none;       /* JS sets 'flex' to open */
+  display: none;      /* JS sets 'flex' to open */
   flex-direction: column;
-  align-items: stretch;
   overflow: hidden;
 }
 
-/* ── Background image div ─────────────────────────────────────
-   Absolutely positioned behind all content.
-   JS sets its background-image and adds sr-bg-loaded.
-   Dim layer built in via ::after so it's always on top of image.  */
-.sr-bg-div {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-image: none;
-  pointer-events: none;
+/* ── Outer grid ──────────────────────────────────────────────
+   Two columns: image | text
+   Image column is fixed-width; text column takes the rest.   */
+.sr-grid {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  height: 100%;
+  overflow: hidden;
 }
-/* Placeholder — shown immediately on page render and on fetch failure.
-   Gradient + faint 絵 kanji so there's always something visible.        */
-.sr-bg-div.sr-bg-placeholder {
-  z-index: 999;
-  background-image:
-    radial-gradient(ellipse at 30% 40%, var(--accent-glow) 0%, transparent 60%),
-    linear-gradient(160deg, var(--bg2) 0%, var(--bg3) 100%);
+
+/* ── Image cell ──────────────────────────────────────────────*/
+.sr-image-cell {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg2);
 }
-.sr-bg-div.sr-bg-placeholder::before {
-  content: '絵';
+
+/* Placeholder — always visible until a real image loads */
+.sr-image-placeholder {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 6rem;
+  background:
+    radial-gradient(ellipse at 30% 40%, var(--accent-glow) 0%, transparent 60%),
+    linear-gradient(160deg, var(--bg2) 0%, var(--bg3) 100%);
+}
+.sr-image-placeholder span {
+  font-size: 5rem;
   color: var(--border);
-  opacity: 0.18;
-  pointer-events: none;
+  opacity: 0.35;
   font-family: 'Noto Sans JP', sans-serif;
+  user-select: none;
 }
 
-/* Dim overlay — on the image div itself, not the container   */
-.sr-bg-div::after {
-  content: '';
+/* Real image — fills the cell, hidden until loaded */
+.sr-image {
   position: absolute;
   inset: 0;
-  background: var(--bg);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   opacity: 0;
-  transition: opacity 0.3s;
-  pointer-events: none;
+  transition: opacity 0.4s ease;
 }
-.sr-bg-div.sr-bg-loaded::after {
-  opacity: 0.5;    /* dim to 50% once image is ready */
-}
-/* Subtle pulse while image is loading */
-.sr-bg-div.sr-bg-loading {
-  background-color: var(--bg2);
-  animation: srBgPulse 1.6s ease-in-out infinite;
-}
-@keyframes srBgPulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.6; }
+.sr-image.sr-image-loaded {
+  opacity: 1;
 }
 
-/* All direct overlay children sit above the bg div           */
-#storyReaderOverlay > * { position: relative; z-index: 1; }
+/* ── Text cell ───────────────────────────────────────────────
+   Scrollable column on the right.                            */
+.sr-text-cell {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.sr-text-cell::-webkit-scrollbar       { width: 4px; }
+.sr-text-cell::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 /* ── Close button ────────────────────────────────────────────*/
 .sr-close-btn {
   position: fixed;
   top: 10px;
   left: 12px;
-  z-index: 10;
+  z-index: 410;
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -1986,7 +1958,7 @@ main.story-active > #lengthFilterBar {
 /* ── Title block ─────────────────────────────────────────────*/
 .sr-title-block {
   text-align: center;
-  padding: 5px 50px 10px;
+  padding: 20px 50px 10px;
   flex-shrink: 0;
 }
 .sr-title-ja {
@@ -2005,19 +1977,6 @@ main.story-active > #lengthFilterBar {
   text-transform: uppercase;
   margin-top: 4px;
 }
-
-/* ── Scrollable content wrapper ──────────────────────────────*/
-.sr-content {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  display: flex;
-  flex-direction: column;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-}
-.sr-content::-webkit-scrollbar       { width: 4px; }
-.sr-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 /* ── Navigation bar ──────────────────────────────────────────*/
 .sr-nav {
@@ -2054,16 +2013,13 @@ main.story-active > #lengthFilterBar {
   letter-spacing: 0.1em;
 }
 
-/* ── Story body — constrained width, centred ─────────────────*/
+/* ── Story body ──────────────────────────────────────────────*/
 .sr-story-body {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 14px;
   padding: 16px 20px;
-  max-width: 62%;
-  width: 100%;
-  margin: 0 auto;
   box-sizing: border-box;
 }
 
@@ -2122,7 +2078,7 @@ main.story-active > #lengthFilterBar {
   border-color: var(--accent);
 }
 
-/* ── Bottom bar: page audio ───────────────────────────────────*/
+/* ── Bottom bar ──────────────────────────────────────────────*/
 .sr-bottom-bar {
   flex-shrink: 0;
   display: flex;
@@ -2145,11 +2101,13 @@ main.story-active > #lengthFilterBar {
 }
 .sr-page-audio-btn:hover { background: var(--accent-glow); }
 
-/* ── Mobile ───────────────────────────────────────────────────*/
+/* ── Mobile ─────────────────────────────────────────────────────*/
 @media (max-width: 600px) {
-  .sr-story-body { padding: 12px 14px; gap: 12px; max-width: 100%; }
-  .sr-seg         { padding: 10px 40px 10px 12px; }
-  .sr-nav         { padding: 8px 12px 4px; gap: 8px; }
-  .sr-nav-btn     { padding: 5px 10px; font-size: 0.68rem; }
-  .sr-title-ja    { font-size: 1.15rem; }
+  .sr-grid           { grid-template-columns: 1fr; grid-template-rows: 240px 1fr; }
+  .sr-image-cell     { height: 240px; }
+  .sr-story-body     { padding: 12px 14px; gap: 12px; }
+  .sr-seg            { padding: 10px 40px 10px 12px; }
+  .sr-nav            { padding: 8px 12px 4px; gap: 8px; }
+  .sr-nav-btn        { padding: 5px 10px; font-size: 0.68rem; }
+  .sr-title-ja       { font-size: 1.15rem; }
 }

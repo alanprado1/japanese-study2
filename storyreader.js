@@ -1,20 +1,20 @@
 /* ============================================================
    積む — storyreader.js  (Phase 4, Session C)
 
-   Audio: speakJP(text, btn) — identical to all other audio buttons.
-          stopAudio() on page navigation. Zero custom polling state.
+   Layout: two-column CSS grid.
+   ─ Left cell  (#srImageCell): image panel with placeholder + real <img>.
+   ─ Right cell (.sr-text-cell): scrollable text — title, nav, segments, audio bar.
 
    Images:
-   ─ A dedicated <div id="srBgDiv"> child is used for the background image.
-     This completely avoids CSS cascade conflicts with the overlay's own
-     background shorthand property.
-   ─ Path 1: IDB data-URL hit (stories generated with current code) → instant.
-   ─ Path 2: Pollinations network fetch (old stories or IDB miss) → uses
-     Image() preloader so the background appears only once loaded; result
-     is cached in IDB for instant display next time.
-   ─ Loading indicator shown while image fetches.
-   ─ Audio for the whole page is prefetched in the background when a page
-     renders so the Play button responds instantly.
+   ─ Path 1: IDB data-URL hit → instant, replaces placeholder with <img>.
+   ─ Path 2: Pollinations network fetch → fetched as blob→dataURL, cached
+     in IDB, then shown. Placeholder stays visible the whole time.
+   ─ Path 3: Fetch fails → placeholder stays, no blank void.
+
+   Audio:
+   ─ speakJP(text, btn) — identical to all other audio buttons.
+   ─ stopAudio() called on page navigation and reader close.
+   ─ Page audio prefetched in background so Play responds instantly.
    ============================================================ */
 
 // ─── Swipe state ──────────────────────────────────────────────
@@ -108,97 +108,72 @@ function _srRenderPage() {
   var closeHTML =
     '<button class="sr-close-btn" onclick="closeStoryReader()" title="Close (Esc)">✕</button>';
 
-  // ── Background div: sits as first child, behind everything ──
-  // Using a dedicated child <div> completely avoids CSS cascade conflicts
-  // with the overlay element's own background shorthand property.
-  var bgHTML = '<div id="srBgDiv" class="sr-bg-div"></div>';
-
+  // ── Two-column grid layout ──
+  // Left cell:  image panel (srImageCell) — plain div, no z-index tricks
+  // Right cell: text panel (sr-text-cell) — scrollable, naturally in front
   overlay.innerHTML =
-    bgHTML +
     closeHTML +
-    titleHTML +
-    '<div class="sr-content">' +
-      navHTML +
-      bodyHTML +
-      bottomHTML +
+    '<div class="sr-grid">' +
+      '<div class="sr-image-cell" id="srImageCell">' +
+        '<div class="sr-image-placeholder"><span>絵</span></div>' +
+      '</div>' +
+      '<div class="sr-text-cell">' +
+        titleHTML +
+        navHTML +
+        bodyHTML +
+        bottomHTML +
+      '</div>' +
     '</div>';
 
-  // Load background image into the dedicated div
-  _srLoadBg(story, pageIdx);
+  // Load image into the left cell
+  _srLoadImage(story, pageIdx);
 
   // Prefetch this page's TTS audio so Play button responds immediately
   _srPrefetchPageAudio(page);
 }
 
-// ─── Background image loading ─────────────────────────────────
-// Uses a dedicated child div (id="srBgDiv") — zero CSS cascade conflicts.
-// Path 1: IDB data-URL → instant (no network).
-// Path 2: Pollinations URL → Image() preloader → show when loaded → cache in IDB.
-function _srLoadBg(story, pageIdx) {
-  var bgDiv = document.getElementById('srBgDiv');
-  if (!bgDiv) return;
-
-  // ── Show placeholder immediately — visible before any async work ──
-  // This ensures the user always sees something, even if Pollinations
-  // is unreachable or the IDB read takes a moment.
-  bgDiv.classList.add('sr-bg-placeholder');
+// ─── Image loading ───────────────────────────────────────────
+// Loads image into the left grid cell (#srImageCell).
+// Path 1: IDB data-URL hit → instant, replace placeholder with <img>.
+// Path 2: Pollinations fetch → show <img> when loaded, cache in IDB.
+// Path 3: Fetch fails → placeholder stays visible, no blank void.
+function _srLoadImage(story, pageIdx) {
+  var cell = document.getElementById('srImageCell');
+  if (!cell) return;
 
   var idbKey   = story.id + '_p' + pageIdx;
-  var storyRef = story;    // closure guard
+  var storyRef = story;
   var pageRef  = pageIdx;
 
   function isStale() {
     return currentStory !== storyRef || currentPageIdx !== pageRef;
   }
 
-  function applyDataUrl(dataUrl) {
+  // Replace the placeholder div with a real <img>
+  function showImage(src) {
     if (isStale()) return;
-    var d = document.getElementById('srBgDiv');
-    if (!d) return;
-    d.classList.remove('sr-bg-placeholder', 'sr-bg-loading');
-    d.style.backgroundImage = 'url(' + dataUrl + ')';
-    d.classList.add('sr-bg-loaded');
-  }
-
-  function fetchAndApplyUrl(pollinationsUrl) {
-    if (isStale()) return;
-    var d = document.getElementById('srBgDiv');
-    if (d) {
-      d.classList.remove('sr-bg-placeholder');
-      d.classList.add('sr-bg-loading');
-    }
-
-    var img    = new Image();
+    var c = document.getElementById('srImageCell');
+    if (!c) return;
+    var img = document.createElement('img');
+    img.className = 'sr-image';
+    img.alt = '';
     img.onload = function() {
       if (isStale()) return;
-      var d2 = document.getElementById('srBgDiv');
-      if (!d2) return;
-      d2.classList.remove('sr-bg-loading', 'sr-bg-placeholder');
-      d2.style.backgroundImage = 'url(' + pollinationsUrl + ')';
-      d2.classList.add('sr-bg-loaded');
-      // Cache as blob→dataURL in IDB so next view is instant
-      if (typeof _idbSet === 'function') {
-        _srUrlToDataUrl(pollinationsUrl, function(dataUrl) {
-          if (dataUrl) _idbSet(idbKey, dataUrl);
-        });
-      }
+      // Remove placeholder once image is painted
+      var ph = c.querySelector('.sr-image-placeholder');
+      if (ph) ph.style.display = 'none';
+      img.classList.add('sr-image-loaded');
     };
     img.onerror = function() {
-      // Fetch failed — restore placeholder so there's always something visible
-      var d2 = document.getElementById('srBgDiv');
-      if (d2) {
-        d2.classList.remove('sr-bg-loading');
-        d2.classList.add('sr-bg-placeholder');
-      }
+      // Image element failed — remove it, placeholder stays
+      if (img.parentNode) img.parentNode.removeChild(img);
     };
-    img.src = pollinationsUrl;
+    c.appendChild(img);
+    img.src = src; // set src AFTER appending so onload fires reliably
   }
 
   function tryPollinations() {
-    if (typeof _buildPrimaryUrl !== 'function') {
-      // _buildPrimaryUrl unavailable — placeholder stays, nothing more to do
-      return;
-    }
+    if (typeof _buildPrimaryUrl !== 'function') return; // placeholder stays
     var descText = story.titleEn || story.title || '';
     var pg = story.pages && story.pages[pageIdx];
     if (pg && pg.segments) {
@@ -210,7 +185,15 @@ function _srLoadBg(story, pageIdx) {
       }
     }
     var url = _buildPrimaryUrl({ id: idbKey, en: descText, jp: descText });
-    fetchAndApplyUrl(url);
+    // Fetch as blob → dataURL so we can cache it in IDB
+    _srUrlToDataUrl(url, function(dataUrl) {
+      if (isStale()) return;
+      if (dataUrl) {
+        if (typeof _idbSet === 'function') _idbSet(idbKey, dataUrl);
+        showImage(dataUrl);
+      }
+      // No dataUrl = fetch failed, placeholder stays
+    });
   }
 
   // Try IDB first
@@ -219,7 +202,7 @@ function _srLoadBg(story, pageIdx) {
       if (isStale()) return;
       if (record) {
         var url = typeof record === 'string' ? record : (record && record.dataUrl);
-        if (url) { applyDataUrl(url); return; }
+        if (url) { showImage(url); return; }
       }
       tryPollinations();
     }).catch(function() { if (!isStale()) tryPollinations(); });
