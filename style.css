@@ -621,7 +621,7 @@ main {
 .popup-overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: 500;
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
   display: none;
@@ -1895,14 +1895,11 @@ main.story-active > #lengthFilterBar {
 }
 
 /* ============================================================
-   PHASE 4 SESSION C — STORY READER
+   PHASE 4 SESSION C — STORY READER  (revised)
    Prefix: sr-
-   All story reader styles isolated here.
    ============================================================ */
 
-/* ── Overlay container ───────────────────────────────────────
-   Full-screen fixed layer. Flex column so content stacks
-   header → nav → panels. Background image set via JS.      */
+/* ── Overlay ─────────────────────────────────────────────────*/
 #storyReaderOverlay {
   position: fixed;
   inset: 0;
@@ -1911,58 +1908,37 @@ main.story-active > #lengthFilterBar {
   background-position: center;
   background-repeat: no-repeat;
   z-index: 400;
-  display: none;
+  display: none;      /* JS sets 'flex' to open */
   flex-direction: column;
   align-items: stretch;
   overflow: hidden;
-  /* When display is set to flex by JS, this kicks in */
 }
 
-/* Dim overlay when a bg image is present */
+/* Dim layer when a page image is loaded */
 #storyReaderOverlay.sr-has-bg::before {
   content: '';
   position: absolute;
   inset: 0;
   background: var(--bg);
-  opacity: 0.50;
+  opacity: 0.52;
   pointer-events: none;
   z-index: 0;
 }
+#storyReaderOverlay > * { position: relative; z-index: 1; }
 
-/* All direct children sit above the dim layer */
-#storyReaderOverlay > * {
-  position: relative;
-  z-index: 1;
-}
-
-/* ── Scrollable content wrapper ─────────────────────────────*/
-.sr-content {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 16px 20px 100px; /* bottom pad for nav bar */
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-}
-.sr-content::-webkit-scrollbar       { width: 4px; }
-.sr-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-/* ── Close button ────────────────────────────────────────────*/
+/* ── Close button — top-left ─────────────────────────────────*/
 .sr-close-btn {
   position: fixed;
-  top: 14px;
-  right: 16px;
+  top: 10px;
+  left: 12px;
   z-index: 10;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--bg2);
   color: var(--text2);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1971,14 +1947,15 @@ main.story-active > #lengthFilterBar {
 }
 .sr-close-btn:hover { background: var(--danger); color: #fff; }
 
-/* ── Title block (first page only) ──────────────────────────*/
+/* ── Title block — top of page 0, 5px from top ───────────────*/
 .sr-title-block {
   text-align: center;
-  padding: 24px 8px 8px;
+  padding: 5px 50px 10px;   /* 5px top, 50px sides (clear close/right edge) */
+  flex-shrink: 0;
 }
 .sr-title-ja {
   font-family: 'Noto Serif JP', serif;
-  font-size: 1.55rem;
+  font-size: 1.4rem;
   font-weight: 600;
   color: var(--text);
   letter-spacing: 0.06em;
@@ -1986,25 +1963,38 @@ main.story-active > #lengthFilterBar {
 }
 .sr-title-en {
   font-family: 'DM Mono', monospace;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   color: var(--text3);
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
-/* ── Navigation bar ─────────────────────────────────────────*/
+/* ── Scrollable content wrapper ──────────────────────────────*/
+.sr-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.sr-content::-webkit-scrollbar       { width: 4px; }
+.sr-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Navigation bar (top) ────────────────────────────────────*/
 .sr-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 10px 0 4px;
+  gap: 12px;
+  padding: 10px 16px 6px;
   flex-shrink: 0;
 }
 
 .sr-nav-btn {
-  padding: 7px 16px;
+  padding: 6px 14px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg2);
@@ -2013,137 +2003,86 @@ main.story-active > #lengthFilterBar {
   font-size: 0.72rem;
   letter-spacing: 0.06em;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
   white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 .sr-nav-btn:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-glow);
 }
-.sr-nav-btn:disabled {
-  opacity: 0.28;
-  cursor: default;
-}
+.sr-nav-btn:disabled { opacity: 0.25; cursor: default; }
 
 .sr-page-counter {
   font-family: 'DM Mono', monospace;
   font-size: 0.72rem;
   color: var(--text3);
   letter-spacing: 0.1em;
-  flex-shrink: 0;
 }
 
-/* Page-level play button */
-.sr-page-audio-btn {
-  padding: 6px 14px;
-  border-radius: 6px;
-  border: 1px solid var(--accent);
-  background: var(--bg2);
-  color: var(--accent);
-  font-family: 'DM Mono', monospace;
-  font-size: 0.68rem;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  transition: background 0.15s;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.sr-page-audio-btn:hover {
-  background: var(--accent-glow);
-}
-.sr-page-audio-btn.sr-page-audio-playing {
-  background: var(--accent-glow);
-  border-color: var(--accent2);
-  color: var(--accent2);
-}
-
-/* ── Manga panel grid ────────────────────────────────────────
-   2-column grid on desktop, 1-column on mobile.            */
-.sr-panel-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  width: 100%;
-}
-
-/* ── Individual panel ────────────────────────────────────────*/
-.sr-panel {
-  position: relative;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--bg2);
-  padding: 16px 14px 40px; /* bottom room for audio button */
+/* ── Story body — single flowing column ──────────────────────*/
+.sr-story-body {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  transition: border-color 0.2s;
+  gap: 14px;
+  padding: 16px 20px;
 }
 
-/* Filler panel — standard */
-.sr-panel-filler {
+/* ── Individual segment ──────────────────────────────────────*/
+.sr-seg {
+  position: relative;
+  border-radius: 8px;
+  padding: 12px 44px 12px 14px;  /* right padding for audio btn */
+}
+
+/* Filler: subtle border, red font */
+.sr-seg-filler {
   background: var(--bg2);
+  border: 1px solid var(--border);
+}
+.sr-seg-filler .sr-seg-text {
+  color: #d96c6c;   /* red — readable on all dark themes */
+}
+[data-theme="light"] .sr-seg-filler .sr-seg-text {
+  color: #cc3333;   /* darker red for light theme */
 }
 
-/* Anchor panel — coloured highlighter background */
-.sr-panel-anchor {
+/* Anchor: highlighted background, normal text */
+.sr-seg-anchor {
   background: var(--highlight);
-  border-color: var(--accent);
+  border: 1px solid var(--accent);
+}
+.sr-seg-anchor .sr-seg-text {
+  color: var(--text);
 }
 
-/* ── Anchor badge (学 kanji in corner) ───────────────────────*/
-.sr-anchor-badge {
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  font-family: 'Noto Serif JP', serif;
-  font-size: 0.65rem;
-  font-weight: 600;
-  color: var(--accent);
-  letter-spacing: 0.04em;
-  opacity: 0.8;
-  user-select: none;
-}
-
-/* ── Panel text ──────────────────────────────────────────────*/
-.sr-panel-text {
+/* Segment text */
+.sr-seg-text {
   font-family: 'Noto Sans JP', 'Noto Serif JP', sans-serif;
   font-size: var(--jp-size, 1.4rem);
   font-weight: var(--jp-weight, 400);
-  color: var(--text);
-  line-height: 1.75;
+  line-height: 1.8;
   word-break: break-all;
-  flex: 1;
 }
 
-/* Anchor panel text slightly larger to reinforce importance */
-.sr-panel-anchor .sr-panel-text {
-  color: var(--text);
-}
+/* Furigana inside segments */
+.sr-seg-text ruby { ruby-align: center; }
+.sr-seg-text rt   { font-size: 0.42em; color: var(--text2); font-weight: 400; }
 
-/* Furigana ruby text inside panels */
-.sr-panel-text ruby  { ruby-align: center; }
-.sr-panel-text rt    {
-  font-size: 0.45em;
-  color: var(--text2);
-  font-weight: 400;
-}
-
-/* Clickable word spans inside reader panels */
-.sr-panel-text .jp-word {
+/* Word click spans produced by buildJPHTML */
+.sr-seg-text .jp-word {
   cursor: pointer;
   border-radius: 2px;
   transition: background 0.12s;
 }
-.sr-panel-text .jp-word:hover {
-  background: var(--highlight);
-  color: var(--accent2);
-}
+.sr-seg-text .jp-word:hover    { background: var(--highlight); }
+.sr-seg-text .jp-word.selected { background: var(--accent); color: var(--bg); }
 
-/* ── Per-panel audio button ──────────────────────────────────*/
-.sr-panel-audio-btn {
+/* ── Per-segment audio button ────────────────────────────────*/
+.sr-seg-audio-btn {
   position: absolute;
-  bottom: 8px;
+  top: 10px;
   right: 10px;
   width: 26px;
   height: 26px;
@@ -2151,46 +2090,54 @@ main.story-active > #lengthFilterBar {
   border: 1px solid var(--border);
   background: var(--bg3);
   color: var(--text3);
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
   padding: 0;
-  line-height: 1;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.sr-panel-audio-btn:hover {
+.sr-seg-audio-btn:hover {
   background: var(--accent-glow);
   color: var(--accent);
   border-color: var(--accent);
 }
 
-/* ── Mobile: single column ────────────────────────────────── */
+/* ── Bottom bar: page audio button ───────────────────────────*/
+.sr-bottom-bar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  padding: 14px 16px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg2);
+}
+
+.sr-page-audio-btn {
+  padding: 8px 24px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--bg3);
+  color: var(--accent);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sr-page-audio-btn:hover            { background: var(--accent-glow); }
+.sr-page-audio-btn.sr-page-audio-playing {
+  border-color: var(--accent2);
+  color: var(--accent2);
+  background: var(--accent-glow);
+}
+
+/* ── Mobile ───────────────────────────────────────────────────*/
 @media (max-width: 600px) {
-  .sr-panel-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .sr-content {
-    padding: 12px 14px 100px;
-  }
-
-  .sr-nav {
-    gap: 6px;
-  }
-
-  .sr-nav-btn {
-    padding: 6px 10px;
-    font-size: 0.68rem;
-  }
-
-  .sr-page-audio-btn {
-    padding: 5px 10px;
-    font-size: 0.65rem;
-  }
-
-  .sr-title-ja {
-    font-size: 1.2rem;
-  }
+  .sr-story-body { padding: 12px 14px; gap: 12px; }
+  .sr-seg         { padding: 10px 40px 10px 12px; }
+  .sr-nav         { padding: 8px 12px 4px; gap: 8px; }
+  .sr-nav-btn     { padding: 5px 10px; font-size: 0.68rem; }
+  .sr-title-ja    { font-size: 1.15rem; }
 }

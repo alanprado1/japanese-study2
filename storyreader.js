@@ -5,27 +5,29 @@
    Load order: 7th — after storybuilder.js, before app.js
 
    Features:
-   ─ Full-screen manga-panel reader overlay
-   ─ 2-column panel grid on desktop, 1-column on mobile
-   ─ Anchor sentences highlighted with coloured background
+   ─ Full-screen single-column story reader
+   ─ Filler text: accent-red coloured font
+   ─ Anchor text: highlighted background (study sentences)
+   ─ Word tap → existing word-lookup popup (z-index fixed)
    ─ Ghibli page image as 50%-opacity background
-   ─ Per-page TTS button (reads all segments sequentially)
-   ─ Per-panel TTS button on each segment
+   ─ Per-page TTS button at bottom (reads all segments sequentially)
+   ─ Per-segment TTS button (proper pause/resume)
    ─ Furigana respects global showFurigana toggle
    ─ Page counter "2 / 5"
    ─ Prev/Next buttons + left/right swipe on mobile
    ─ Swipe-down to close on mobile
-   ─ Escape key + X button to close
+   ─ Escape + ArrowKeys keyboard support
+   ─ X button top-left, title 5px from top
    ─ Next button does nothing on the last page
    ============================================================ */
 
 // ─── Module state ─────────────────────────────────────────────
-var _srSwipeStartX   = 0;   // touch start X for left/right swipe
-var _srSwipeStartY   = 0;   // touch start Y for swipe-down detection
-var _srSwipeDir      = null; // 'h' | 'v' | null — locked after 8px
-var _srPageAudioBtn  = null; // the active "play page" button element
-var _srPagePlayToken = 0;    // increments to cancel in-flight page audio
+var _srSwipeStartX   = 0;
+var _srSwipeStartY   = 0;
+var _srSwipeDir      = null;  // 'h' | 'v' | null — locked after 8px
+var _srPagePlayToken = 0;     // increments to cancel in-flight page audio
 var _srPagePlaying   = false; // true while page-level TTS is running
+var _srSwipeWired    = false; // prevent double-wiring swipe listeners
 
 // ─── Open the reader ──────────────────────────────────────────
 function openStoryReader(story) {
@@ -33,24 +35,25 @@ function openStoryReader(story) {
 
   currentStory   = story;
   currentPageIdx = 0;
-
-  _srStopPageAudio(); // kill any leftover audio from a previous session
+  _srStopPageAudio();
 
   var overlay = document.getElementById('storyReaderOverlay');
   if (!overlay) return;
   overlay.style.display = 'flex';
 
   _srRenderPage();
-  _srWireSwipe(overlay);
+
+  if (!_srSwipeWired) {
+    _srWireSwipe(overlay);
+    _srSwipeWired = true;
+  }
 }
 
 // ─── Close the reader ─────────────────────────────────────────
 function closeStoryReader() {
   _srStopPageAudio();
-
   currentStory   = null;
   currentPageIdx = 0;
-
   var overlay = document.getElementById('storyReaderOverlay');
   if (overlay) overlay.style.display = 'none';
 }
@@ -59,7 +62,7 @@ function closeStoryReader() {
 function _srGoTo(idx) {
   if (!currentStory) return;
   var total = currentStory.pages.length;
-  if (idx < 0 || idx >= total) return; // clamp — next does nothing on last page
+  if (idx < 0 || idx >= total) return; // next does nothing on last page
   _srStopPageAudio();
   currentPageIdx = idx;
   _srRenderPage();
@@ -75,234 +78,184 @@ function _srRenderPage() {
   var page     = story.pages[pageIdx];
   var total    = story.pages.length;
   var segments = page ? page.segments : [];
-
-  // ── Background image (50% opacity, covers full page) ──────
-  var bgKey = story.id + '_p' + pageIdx;
-  _srSetBackground(overlay, bgKey);
-
-  // ── Build HTML ─────────────────────────────────────────────
   var isFirst  = pageIdx === 0;
   var isLast   = pageIdx === total - 1;
 
-  // Title bar (only on first page)
+  // ── Background image ───────────────────────────────────────
+  _srSetBackground(overlay, story.id + '_p' + pageIdx);
+
+  // ── Title — fixed at top, only page 0 ─────────────────────
   var titleHTML = '';
   if (isFirst) {
     titleHTML =
       '<div class="sr-title-block">' +
-        '<div class="sr-title-ja">' + _srEsc(story.title || '') + '</div>' +
+        '<div class="sr-title-ja">' + _srEsc(story.title  || '') + '</div>' +
         '<div class="sr-title-en">' + _srEsc(story.titleEn || '') + '</div>' +
       '</div>';
   }
 
-  // Page counter
-  var counterHTML =
-    '<div class="sr-page-counter">' + (pageIdx + 1) + ' / ' + total + '</div>';
-
-  // Page-level TTS button
-  var pageAudioHTML =
-    '<button class="sr-page-audio-btn" id="srPageAudioBtn" ' +
-      'onclick="_srTogglePageAudio()" title="Play page">' +
-      '&#9654; Play page' +
-    '</button>';
-
-  // Manga panels
-  var panelsHTML = '<div class="sr-panel-grid">';
-  for (var i = 0; i < segments.length; i++) {
-    panelsHTML += _srRenderPanel(segments[i], i, pageIdx);
-  }
-  panelsHTML += '</div>';
-
-  // Navigation
-  var prevDisabled = isFirst  ? ' disabled' : '';
-  var nextDisabled = isLast   ? ' disabled' : '';
+  // ── Nav bar (top: prev · counter · next) ──────────────────
+  var prevDis = isFirst ? ' disabled' : '';
+  var nextDis = isLast  ? ' disabled' : '';
   var navHTML =
     '<div class="sr-nav">' +
-      '<button class="sr-nav-btn sr-nav-prev" onclick="_srGoTo(' + (pageIdx - 1) + ')"' + prevDisabled + '>← Prev</button>' +
-      counterHTML +
-      pageAudioHTML +
-      '<button class="sr-nav-btn sr-nav-next" onclick="_srGoTo(' + (pageIdx + 1) + ')"' + nextDisabled + '>Next →</button>' +
+      '<button class="sr-nav-btn sr-nav-prev" onclick="_srGoTo(' + (pageIdx - 1) + ')"' + prevDis + '>← Prev</button>' +
+      '<div class="sr-page-counter">' + (pageIdx + 1) + ' / ' + total + '</div>' +
+      '<button class="sr-nav-btn sr-nav-next" onclick="_srGoTo(' + (pageIdx + 1) + ')"' + nextDis + '>Next →</button>' +
     '</div>';
 
-  // Close button
+  // ── Story body — single flowing column ─────────────────────
+  var bodyHTML = '<div class="sr-story-body">';
+  for (var i = 0; i < segments.length; i++) {
+    bodyHTML += _srRenderSegment(segments[i], i);
+  }
+  bodyHTML += '</div>';
+
+  // ── Bottom bar: page audio button ─────────────────────────
+  var bottomHTML =
+    '<div class="sr-bottom-bar">' +
+      '<button class="sr-page-audio-btn" id="srPageAudioBtn" ' +
+        'onclick="_srTogglePageAudio()" title="Play whole page">' +
+        '&#9654; Play page' +
+      '</button>' +
+    '</div>';
+
+  // ── Close button (top-left) ────────────────────────────────
   var closeHTML =
     '<button class="sr-close-btn" onclick="closeStoryReader()" title="Close (Esc)">✕</button>';
 
-  // Assemble
+  // ── Assemble ───────────────────────────────────────────────
   overlay.innerHTML =
     closeHTML +
+    titleHTML +
     '<div class="sr-content">' +
-      titleHTML +
       navHTML +
-      panelsHTML +
+      bodyHTML +
+      bottomHTML +
     '</div>';
 }
 
-// ─── Render a single manga panel ─────────────────────────────
-function _srRenderPanel(seg, segIdx, pageIdx) {
-  var isAnchor  = seg.type === 'anchor';
-  var panelCls  = 'sr-panel' + (isAnchor ? ' sr-panel-anchor' : ' sr-panel-filler');
+// ─── Render a single segment ──────────────────────────────────
+function _srRenderSegment(seg, segIdx) {
+  var isAnchor = seg.type === 'anchor';
+  var cls      = 'sr-seg ' + (isAnchor ? 'sr-seg-anchor' : 'sr-seg-filler');
 
-  // Japanese text — furigana if enabled
+  // Japanese text with furigana — buildJPHTML already wires lookupWord()
   var jpHTML = (typeof buildJPHTML === 'function')
     ? buildJPHTML(seg.text)
     : _srEsc(seg.text);
 
-  // Per-panel audio button
+  // Per-segment audio button
   var safeText = seg.text.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   var audioBtnHTML =
-    '<button class="sr-panel-audio-btn" ' +
+    '<button class="sr-seg-audio-btn" ' +
       'onclick="event.stopPropagation();_srPlaySegment(\'' + safeText + '\',this)" ' +
-      'title="Play segment">&#9654;</button>';
-
-  // Anchor badge
-  var badgeHTML = isAnchor
-    ? '<div class="sr-anchor-badge">学</div>'
-    : '';
+      'title="Play">&#9654;</button>';
 
   return (
-    '<div class="' + panelCls + '" data-seg-idx="' + segIdx + '">' +
-      badgeHTML +
-      '<div class="sr-panel-text">' + jpHTML + '</div>' +
+    '<div class="' + cls + '">' +
+      '<div class="sr-seg-text">' + jpHTML + '</div>' +
       audioBtnHTML +
     '</div>'
   );
 }
 
-// ─── Background image loading ─────────────────────────────────
+// ─── Background image ─────────────────────────────────────────
 function _srSetBackground(overlay, idbKey) {
-  // Clear any previous background image
   overlay.style.backgroundImage = '';
   overlay.classList.remove('sr-has-bg');
-
   if (typeof _idbGet !== 'function') return;
 
   _idbGet(idbKey).then(function(record) {
-    if (!record || !record.dataUrl) return;
-    // Only apply if we're still on the same overlay instance
+    if (!record) return;
+    // _idbGet returns { id, dataUrl, ts }
+    var url = typeof record === 'string' ? record : record.dataUrl;
+    if (!url) return;
     if (document.getElementById('storyReaderOverlay') !== overlay) return;
-    overlay.style.backgroundImage = 'url(' + record.dataUrl + ')';
+    overlay.style.backgroundImage = 'url(' + url + ')';
     overlay.classList.add('sr-has-bg');
   }).catch(function() {});
 }
 
 // ─── Per-segment TTS ──────────────────────────────────────────
+// Only stops page-level audio — lets speakJP handle its own pause/resume.
 function _srPlaySegment(text, btnEl) {
   if (typeof speakJP !== 'function') return;
-  // Stop any running page-level TTS first
-  _srStopPageAudio();
+  if (_srPagePlaying) _srStopPageAudio(); // only kill page-level, not segment
   speakJP(text, btnEl).catch(function() {});
 }
 
-// ─── Page-level TTS ──────────────────────────────────────────
-// Reads all segments of the current page sequentially.
-
+// ─── Page-level TTS ───────────────────────────────────────────
 function _srTogglePageAudio() {
-  var btn = document.getElementById('srPageAudioBtn');
-
-  if (_srPagePlaying) {
-    _srStopPageAudio();
-    return;
-  }
+  if (_srPagePlaying) { _srStopPageAudio(); return; }
 
   if (!currentStory) return;
   var page = currentStory.pages[currentPageIdx];
   if (!page || !page.segments.length) return;
   if (typeof speakJP !== 'function') return;
 
-  // Collect all text segments for this page
   var texts = page.segments
     .map(function(s) { return s.text.trim(); })
     .filter(function(t) { return t.length > 0; });
-
   if (!texts.length) return;
 
-  _srPagePlaying  = true;
-  _srPageAudioBtn = btn;
+  _srPagePlaying = true;
   _srPagePlayToken++;
   var myToken = _srPagePlayToken;
 
-  if (btn) {
-    btn.innerHTML = '&#9646;&#9646; Stop';
-    btn.classList.add('sr-page-audio-playing');
-  }
+  var btn = document.getElementById('srPageAudioBtn');
+  if (btn) { btn.innerHTML = '&#9646;&#9646; Stop'; btn.classList.add('sr-page-audio-playing'); }
 
-  // Chain segments one after another
   function playNext(idx) {
-    if (myToken !== _srPagePlayToken) return; // cancelled
-    if (idx >= texts.length) {
-      _srStopPageAudio();
-      return;
-    }
+    if (myToken !== _srPagePlayToken) return;
+    if (idx >= texts.length) { _srStopPageAudio(); return; }
     var p = speakJP(texts[idx], null);
     if (p && typeof p.then === 'function') {
-      // speakJP resolves when audio ends or immediately on pause/resume paths.
-      // We poll isSpeaking because speakJP's promise resolves right away
-      // in some code paths (cache hit starts audio but resolve fires early).
-      // Instead we use a small poller to detect when audio finishes.
-      _srWaitForEnd(myToken, function() {
-        playNext(idx + 1);
-      });
+      _srWaitForEnd(myToken, function() { playNext(idx + 1); });
     } else {
-      // speakJP returned synchronously (e.g. Web Speech path) — just move on
       playNext(idx + 1);
     }
   }
-
   playNext(0);
 }
 
-// Polls until isSpeaking is false or the token changes (cancelled).
+// Polls tts.js globals until audio finishes or token changes
 function _srWaitForEnd(token, cb) {
-  var MAX_WAIT = 120000; // 2 min hard ceiling
-  var elapsed  = 0;
-  var INTERVAL = 150;
-
+  var elapsed = 0;
   function tick() {
-    if (token !== _srPagePlayToken) return; // cancelled
-    elapsed += INTERVAL;
-    if (elapsed > MAX_WAIT) { _srStopPageAudio(); return; }
-
-    // isSpeaking is a global managed by tts.js
-    var stillPlaying = (typeof isSpeaking !== 'undefined' && isSpeaking) ||
-                       (typeof isPaused   !== 'undefined' && isPaused);
-    if (stillPlaying) {
-      setTimeout(tick, INTERVAL);
-    } else {
-      // Small buffer so the next segment doesn't start mid-fade
-      setTimeout(cb, 120);
-    }
+    if (token !== _srPagePlayToken) return;
+    elapsed += 150;
+    if (elapsed > 120000) { _srStopPageAudio(); return; }
+    var playing = (typeof isSpeaking !== 'undefined' && isSpeaking) ||
+                  (typeof isPaused   !== 'undefined' && isPaused);
+    if (playing) setTimeout(tick, 150);
+    else         setTimeout(cb,   120);
   }
-  setTimeout(tick, INTERVAL);
+  setTimeout(tick, 150);
 }
 
 function _srStopPageAudio() {
-  _srPagePlayToken++; // invalidates all in-flight waits
-  _srPagePlaying  = false;
+  _srPagePlayToken++;
+  _srPagePlaying = false;
 
-  // Stop tts.js audio engine
+  // Stop tts.js engine
   if (typeof playToken !== 'undefined') playToken++;
   if (typeof currentGain !== 'undefined' && currentGain) {
     try { currentGain.gain.cancelScheduledValues(0); currentGain.gain.setValueAtTime(0, 0); } catch(e) {}
   }
   if (typeof currentAudio !== 'undefined' && currentAudio) {
     try { currentAudio.pause(); } catch(e) {}
+    currentAudio = null;
   }
-  if (typeof isSpeaking !== 'undefined') isSpeaking = false;
-  if (typeof isPaused   !== 'undefined') isPaused   = false;
+  if (typeof currentGain  !== 'undefined') currentGain  = null;
+  if (typeof isSpeaking   !== 'undefined') isSpeaking   = false;
+  if (typeof isPaused     !== 'undefined') isPaused     = false;
 
-  // Reset page button UI
   var btn = document.getElementById('srPageAudioBtn');
-  if (btn) {
-    btn.innerHTML = '&#9654; Play page';
-    btn.classList.remove('sr-page-audio-playing');
-  }
-  _srPageAudioBtn = null;
+  if (btn) { btn.innerHTML = '&#9654; Play page'; btn.classList.remove('sr-page-audio-playing'); }
 }
 
-// ─── Touch swipe wiring ───────────────────────────────────────
-// Left/right → prev/next page. Down → close reader.
-// Locks direction after 8px of movement so one gesture doesn't trigger both.
-
+// ─── Touch swipe ──────────────────────────────────────────────
 function _srWireSwipe(overlay) {
   overlay.addEventListener('touchstart', _srOnTouchStart, { passive: true });
   overlay.addEventListener('touchmove',  _srOnTouchMove,  { passive: true });
@@ -317,24 +270,23 @@ function _srOnTouchStart(e) {
 }
 
 function _srOnTouchMove(e) {
-  if (!e.touches.length) return;
+  if (!e.touches.length || _srSwipeDir) return;
   var dx = e.touches[0].clientX - _srSwipeStartX;
   var dy = e.touches[0].clientY - _srSwipeStartY;
-  if (!_srSwipeDir && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+  if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
     _srSwipeDir = Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v';
   }
 }
 
 function _srOnTouchEnd(e) {
-  var t = e.changedTouches[0];
+  var t  = e.changedTouches[0];
   var dx = t.clientX - _srSwipeStartX;
   var dy = t.clientY - _srSwipeStartY;
-
   if (_srSwipeDir === 'h' && Math.abs(dx) > 50) {
-    if (dx < 0) _srGoTo(currentPageIdx + 1); // swipe left → next
-    else         _srGoTo(currentPageIdx - 1); // swipe right → prev
+    if (dx < 0) _srGoTo(currentPageIdx + 1);
+    else         _srGoTo(currentPageIdx - 1);
   } else if (_srSwipeDir === 'v' && dy > 80) {
-    closeStoryReader(); // swipe down → close
+    closeStoryReader();
   }
   _srSwipeDir = null;
 }
@@ -343,10 +295,9 @@ function _srOnTouchEnd(e) {
 document.addEventListener('keydown', function(e) {
   var overlay = document.getElementById('storyReaderOverlay');
   if (!overlay || overlay.style.display === 'none') return;
-
-  if (e.key === 'Escape')     { closeStoryReader(); }
-  if (e.key === 'ArrowRight') { _srGoTo(currentPageIdx + 1); }
-  if (e.key === 'ArrowLeft')  { _srGoTo(currentPageIdx - 1); }
+  if (e.key === 'Escape')     closeStoryReader();
+  if (e.key === 'ArrowRight') _srGoTo(currentPageIdx + 1);
+  if (e.key === 'ArrowLeft')  _srGoTo(currentPageIdx - 1);
 });
 
 // ─── HTML escape ──────────────────────────────────────────────

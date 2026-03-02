@@ -44,7 +44,7 @@ var _sbDeckId       = null;  // which deck's stories are currently loaded
 var _sbLoading      = false; // Firebase load in progress
 
 // Generation settings — persisted to localStorage
-var _sbGenSettings  = { totalPages: 5, charsPerPage: 120 };
+var _sbGenSettings  = { totalPages: 5, charsPerPage: 120, anchorPct: 70 };
 
 // Custom group — which SRS ratings to include
 var _sbCustomAttrs  = { again: false, hard: false, good: false };
@@ -601,9 +601,24 @@ function sbOpenGenModal(groupType) {
     b.classList.toggle('active', parseInt(b.dataset.chars, 10) === _sbGenSettings.charsPerPage);
   }
 
+  // Restore anchor % slider
+  var anchorSlider = document.getElementById('sbAnchorPctSlider');
+  var anchorVal    = document.getElementById('sbAnchorPctVal');
+  if (anchorSlider) {
+    anchorSlider.value = _sbGenSettings.anchorPct;
+    if (anchorVal) anchorVal.textContent = _sbGenSettings.anchorPct;
+  }
+
   // Show modal
   var overlay = document.getElementById('sbGenModal');
   if (overlay) overlay.classList.add('active');
+}
+
+function sbUpdateAnchorPct(val) {
+  _sbGenSettings.anchorPct = parseInt(val, 10);
+  var el = document.getElementById('sbAnchorPctVal');
+  if (el) el.textContent = val;
+  try { localStorage.setItem('jpStudy_sbGenSettings', JSON.stringify(_sbGenSettings)); } catch(e) {}
 }
 
 function sbCloseGenModal() {
@@ -725,6 +740,7 @@ function _sbBuildPrompt(anchors, settings) {
     'Filler prose is only short connective tissue — 1 to 2 sentences maximum per filler segment. ' +
     'The majority of text on every page must be anchor sentences, not filler.\n\n' +
     'TASK: Write a ' + settings.totalPages + '-page Japanese story using ALL ' + anchors.length + ' anchor sentences below verbatim. ' +
+    'Roughly ' + (settings.anchorPct || 70) + '% of all segments should be anchor segments. ' +
     'Spread them across pages (~' + anchorsPerPage + ' anchors per page). ' +
     'Connect them with minimal natural bridging prose.\n\n' +
     'ANCHOR SENTENCES — use ALL of them, copied exactly character for character:\n' +
@@ -732,7 +748,7 @@ function _sbBuildPrompt(anchors, settings) {
     'REQUIREMENTS:\n' +
     '- Exactly ' + settings.totalPages + ' pages\n' +
     '- Every anchor sentence must appear exactly once across all pages\n' +
-    '- Each page must contain ' + anchorsPerPage + ' or more anchor segments\n' +
+    '- Each page should have roughly ' + anchorsPerPage + ' anchor segments (' + (settings.anchorPct || 70) + '% anchor target)\n' +
     '- Filler segments: SHORT bridging only (1-2 sentences max). Never write long filler paragraphs\n' +
     '- Never put two filler segments in a row — always separate them with at least one anchor\n' +
     '- Filler must be natural Japanese at the same difficulty level as the anchors\n' +
@@ -772,7 +788,7 @@ function _sbCallGemini(prompt) {
     body: JSON.stringify({
       prompt:          prompt,
       temperature:     0.85,
-      maxOutputTokens: 8192
+      maxOutputTokens: 16384
     })
   })
   .then(function(r) { return r.json(); })
@@ -1000,13 +1016,24 @@ function _sbRunGeneration(groupType, settings, existingStoryId) {
     return;
   }
 
-  // ── 2. Anchor selection — pack as many as sensibly fit ──
-  // Target: ~3-5 anchor sentences per page so studied sentences dominate.
-  // Cap at pool size and at a hard max (60) to stay within Gemini's context.
+  // ── 2. Auto-adjust page count if pool is too small ──
+  // Each page needs at least 1 anchor. If fewer sentences than pages, shrink pages.
+  var autoPages = Math.min(settings.totalPages, pool.length);
+  if (autoPages < settings.totalPages) {
+    settings = Object.assign({}, settings, { totalPages: autoPages });
+    sbShowToast('Pages reduced to ' + autoPages + ' to match available sentences.', 3000);
+  }
+
+  // ── 3. Anchor selection — driven by anchorPct slider ──
+  // anchorPct = target % of segments that should be anchor sentences.
+  // Estimate total segments per page as ~4 (3 anchor + 1 filler at 70%).
+  // Cap at 60 to avoid Gemini context limits; always at least 2 per page.
+  var pct        = (settings.anchorPct || 70) / 100;
+  var segsPerPage = 4;
   var numAnchors = Math.min(
     pool.length,
     60,
-    Math.max(3, settings.totalPages * 4)
+    Math.max(2, Math.round(settings.totalPages * segsPerPage * pct))
   );
   var shuffled = pool.slice().sort(function() { return Math.random() - 0.5; });
   var anchors  = shuffled.slice(0, numAnchors);
@@ -1163,6 +1190,7 @@ document.addEventListener('keydown', function(e) {
       var ps = JSON.parse(rawSettings);
       if (ps.totalPages   && ps.totalPages >= 1   && ps.totalPages <= 20)   _sbGenSettings.totalPages   = ps.totalPages;
       if (ps.charsPerPage && ps.charsPerPage >= 60 && ps.charsPerPage <= 250) _sbGenSettings.charsPerPage = ps.charsPerPage;
+      if (ps.anchorPct   && ps.anchorPct   >= 10 && ps.anchorPct   <= 100)  _sbGenSettings.anchorPct   = ps.anchorPct;
     }
   } catch(e) {}
 })();
