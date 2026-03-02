@@ -4,30 +4,25 @@
 
    Load order: 7th — after storybuilder.js, before app.js
 
-   Features:
-   ─ Full-screen single-column story reader
-   ─ Filler text: accent-red coloured font
-   ─ Anchor text: highlighted background (study sentences)
-   ─ Word tap → existing word-lookup popup (z-index fixed)
-   ─ Ghibli page image as 50%-opacity background
-   ─ Per-page TTS button at bottom (reads all segments sequentially)
-   ─ Per-segment TTS button (proper pause/resume)
-   ─ Furigana respects global showFurigana toggle
-   ─ Page counter "2 / 5"
-   ─ Prev/Next buttons + left/right swipe on mobile
-   ─ Swipe-down to close on mobile
-   ─ Escape + ArrowKeys keyboard support
-   ─ X button top-left, title 5px from top
-   ─ Next button does nothing on the last page
+   Audio architecture:
+   ─ Page button:    speakJP(allPageText, pageBtn) — identical to every
+                     other audio button in the app. speakJP handles
+                     play / pause / resume / stop natively.
+   ─ Segment button: speakJP(segText, segBtn) — same pattern.
+   ─ Navigation:     stopAudio() — tts.js hard-stop used on page change.
+   No custom polling, no custom state flags, no race conditions.
+
+   Image architecture:
+   ─ Tries IDB first (pre-generated during story creation).
+   ─ Falls back to direct Pollinations URL (deterministic seed) so images
+     always show even if deck image-gen was off at generation time.
    ============================================================ */
 
-// ─── Module state ─────────────────────────────────────────────
-var _srSwipeStartX   = 0;
-var _srSwipeStartY   = 0;
-var _srSwipeDir      = null;  // 'h' | 'v' | null — locked after 8px
-var _srPagePlayToken = 0;     // increments to cancel in-flight page audio
-var _srPagePlaying   = false; // true while page-level TTS is running
-var _srSwipeWired    = false; // prevent double-wiring swipe listeners
+// ─── Swipe state (no audio state — speakJP owns that) ─────────
+var _srSwipeStartX = 0;
+var _srSwipeStartY = 0;
+var _srSwipeDir    = null;   // 'h' | 'v' | null
+var _srSwipeWired  = false;  // prevent double-wiring
 
 // ─── Open the reader ──────────────────────────────────────────
 function openStoryReader(story) {
@@ -35,7 +30,7 @@ function openStoryReader(story) {
 
   currentStory   = story;
   currentPageIdx = 0;
-  _srStopPageAudio();
+  _srStopAudio();
 
   var overlay = document.getElementById('storyReaderOverlay');
   if (!overlay) return;
@@ -51,7 +46,7 @@ function openStoryReader(story) {
 
 // ─── Close the reader ─────────────────────────────────────────
 function closeStoryReader() {
-  _srStopPageAudio();
+  _srStopAudio();
   currentStory   = null;
   currentPageIdx = 0;
   var overlay = document.getElementById('storyReaderOverlay');
@@ -62,10 +57,18 @@ function closeStoryReader() {
 function _srGoTo(idx) {
   if (!currentStory) return;
   var total = currentStory.pages.length;
-  if (idx < 0 || idx >= total) return; // next does nothing on last page
-  _srStopPageAudio();
+  if (idx < 0 || idx >= total) return;
+  _srStopAudio();
   currentPageIdx = idx;
   _srRenderPage();
+}
+
+// ─── Stop audio — delegates entirely to tts.js stopAudio() ────
+// stopAudio() resets: currentAudio, currentGain, isSpeaking, isPaused,
+// playToken, _listAudioBtn (and resets that button's innerHTML to ▶).
+// This correctly handles both page-level and segment-level audio.
+function _srStopAudio() {
+  if (typeof stopAudio === 'function') stopAudio();
 }
 
 // ─── Render a single page ─────────────────────────────────────
@@ -82,45 +85,46 @@ function _srRenderPage() {
   var isLast   = pageIdx === total - 1;
 
   // ── Background image ───────────────────────────────────────
-  _srSetBackground(overlay, story.id + '_p' + pageIdx);
+  _srSetBackground(overlay, story, pageIdx);
 
-  // ── Title — fixed at top, only page 0 ─────────────────────
+  // ── Title block — page 0 only ──────────────────────────────
   var titleHTML = '';
   if (isFirst) {
     titleHTML =
       '<div class="sr-title-block">' +
-        '<div class="sr-title-ja">' + _srEsc(story.title  || '') + '</div>' +
+        '<div class="sr-title-ja">' + _srEsc(story.title   || '') + '</div>' +
         '<div class="sr-title-en">' + _srEsc(story.titleEn || '') + '</div>' +
       '</div>';
   }
 
-  // ── Nav bar (top: prev · counter · next) ──────────────────
+  // ── Nav bar ────────────────────────────────────────────────
   var prevDis = isFirst ? ' disabled' : '';
   var nextDis = isLast  ? ' disabled' : '';
   var navHTML =
     '<div class="sr-nav">' +
-      '<button class="sr-nav-btn sr-nav-prev" onclick="_srGoTo(' + (pageIdx - 1) + ')"' + prevDis + '>← Prev</button>' +
+      '<button class="sr-nav-btn" onclick="_srGoTo(' + (pageIdx - 1) + ')"' + prevDis + '>← Prev</button>' +
       '<div class="sr-page-counter">' + (pageIdx + 1) + ' / ' + total + '</div>' +
-      '<button class="sr-nav-btn sr-nav-next" onclick="_srGoTo(' + (pageIdx + 1) + ')"' + nextDis + '>Next →</button>' +
+      '<button class="sr-nav-btn" onclick="_srGoTo(' + (pageIdx + 1) + ')"' + nextDis + '>Next →</button>' +
     '</div>';
 
-  // ── Story body — single flowing column ─────────────────────
+  // ── Story segments ─────────────────────────────────────────
   var bodyHTML = '<div class="sr-story-body">';
   for (var i = 0; i < segments.length; i++) {
-    bodyHTML += _srRenderSegment(segments[i], i);
+    bodyHTML += _srRenderSegment(segments[i]);
   }
   bodyHTML += '</div>';
 
   // ── Bottom bar: page audio button ─────────────────────────
+  // Button is passed to speakJP — it manages innerHTML (▶ / pause-icon) itself.
   var bottomHTML =
     '<div class="sr-bottom-bar">' +
       '<button class="sr-page-audio-btn" id="srPageAudioBtn" ' +
-        'onclick="_srTogglePageAudio()" title="Play whole page">' +
+        'onclick="_srTogglePageAudio(this)" title="Play / pause whole page">' +
         '&#9654; Play page' +
       '</button>' +
     '</div>';
 
-  // ── Close button (top-left) ────────────────────────────────
+  // ── Close button ───────────────────────────────────────────
   var closeHTML =
     '<button class="sr-close-btn" onclick="closeStoryReader()" title="Close (Esc)">✕</button>';
 
@@ -135,19 +139,19 @@ function _srRenderPage() {
     '</div>';
 }
 
-// ─── Render a single segment ──────────────────────────────────
-function _srRenderSegment(seg, segIdx) {
+// ─── Render one segment ───────────────────────────────────────
+function _srRenderSegment(seg) {
   var isAnchor = seg.type === 'anchor';
   var cls      = 'sr-seg ' + (isAnchor ? 'sr-seg-anchor' : 'sr-seg-filler');
 
-  // Japanese text with furigana — buildJPHTML already wires lookupWord()
+  // buildJPHTML adds furigana and wires lookupWord() click handlers
   var jpHTML = (typeof buildJPHTML === 'function')
     ? buildJPHTML(seg.text)
     : _srEsc(seg.text);
 
-  // Per-segment audio button
+  // Escape text for inline onclick attribute
   var safeText = seg.text.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  var audioBtnHTML =
+  var audioBtn =
     '<button class="sr-seg-audio-btn" ' +
       'onclick="event.stopPropagation();_srPlaySegment(\'' + safeText + '\',this)" ' +
       'title="Play">&#9654;</button>';
@@ -155,107 +159,95 @@ function _srRenderSegment(seg, segIdx) {
   return (
     '<div class="' + cls + '">' +
       '<div class="sr-seg-text">' + jpHTML + '</div>' +
-      audioBtnHTML +
+      audioBtn +
     '</div>'
   );
 }
 
 // ─── Background image ─────────────────────────────────────────
-function _srSetBackground(overlay, idbKey) {
+// Step 1: try IDB (pre-generated data URL).
+// Step 2: fall back to direct Pollinations URL (same deterministic seed).
+// Both paths always show an image — deck imageGen setting irrelevant here.
+function _srSetBackground(overlay, story, pageIdx) {
   overlay.style.backgroundImage = '';
   overlay.classList.remove('sr-has-bg');
-  if (typeof _idbGet !== 'function') return;
 
-  _idbGet(idbKey).then(function(record) {
-    if (!record) return;
-    // _idbGet returns { id, dataUrl, ts }
-    var url = typeof record === 'string' ? record : record.dataUrl;
+  var idbKey   = story.id + '_p' + pageIdx;
+  var snapshot = { story: story, pageIdx: pageIdx }; // closure guard values
+
+  function applyUrl(url) {
     if (!url) return;
-    if (document.getElementById('storyReaderOverlay') !== overlay) return;
+    // Guard: user may have navigated away before async resolved
+    if (currentStory !== snapshot.story || currentPageIdx !== snapshot.pageIdx) return;
     overlay.style.backgroundImage = 'url(' + url + ')';
     overlay.classList.add('sr-has-bg');
-  }).catch(function() {});
-}
+  }
 
-// ─── Per-segment TTS ──────────────────────────────────────────
-// Only stops page-level audio — lets speakJP handle its own pause/resume.
-function _srPlaySegment(text, btnEl) {
-  if (typeof speakJP !== 'function') return;
-  if (_srPagePlaying) _srStopPageAudio(); // only kill page-level, not segment
-  speakJP(text, btnEl).catch(function() {});
+  // Fallback: build deterministic Pollinations URL from page data
+  function tryPollinations() {
+    if (typeof _buildPrimaryUrl !== 'function') return;
+    var descText = story.titleEn || story.title || '';
+    var page     = story.pages && story.pages[pageIdx];
+    if (page && page.segments) {
+      for (var i = 0; i < page.segments.length; i++) {
+        if (page.segments[i].type === 'filler') {
+          descText = page.segments[i].text.slice(0, 90);
+          break;
+        }
+      }
+    }
+    applyUrl(_buildPrimaryUrl({ id: idbKey, en: descText, jp: descText }));
+  }
+
+  if (typeof _idbGet === 'function') {
+    _idbGet(idbKey).then(function(record) {
+      if (record) {
+        var url = typeof record === 'string' ? record : (record && record.dataUrl);
+        if (url) { applyUrl(url); return; }
+      }
+      tryPollinations();
+    }).catch(tryPollinations);
+  } else {
+    tryPollinations();
+  }
 }
 
 // ─── Page-level TTS ───────────────────────────────────────────
-function _srTogglePageAudio() {
-  if (_srPagePlaying) { _srStopPageAudio(); return; }
+// Joins all segments into one string and hands the button to speakJP.
+// speakJP natively handles: play → pause → resume → end → reset button.
+// This is IDENTICAL in architecture to every other audio button in the app.
+function _srTogglePageAudio(btn) {
+  if (!btn) btn = document.getElementById('srPageAudioBtn');
+  if (!btn || !currentStory || typeof speakJP !== 'function') return;
 
-  if (!currentStory) return;
   var page = currentStory.pages[currentPageIdx];
   if (!page || !page.segments.length) return;
-  if (typeof speakJP !== 'function') return;
 
-  var texts = page.segments
+  // Concatenate segments. 。between them gives a natural TTS pause.
+  var allText = page.segments
     .map(function(s) { return s.text.trim(); })
-    .filter(function(t) { return t.length > 0; });
-  if (!texts.length) return;
+    .filter(function(t) { return t.length > 0; })
+    .join('\u3002');
 
-  _srPagePlaying = true;
-  _srPagePlayToken++;
-  var myToken = _srPagePlayToken;
+  if (!allText) return;
 
-  var btn = document.getElementById('srPageAudioBtn');
-  if (btn) { btn.innerHTML = '&#9646;&#9646; Stop'; btn.classList.add('sr-page-audio-playing'); }
-
-  function playNext(idx) {
-    if (myToken !== _srPagePlayToken) return;
-    if (idx >= texts.length) { _srStopPageAudio(); return; }
-    var p = speakJP(texts[idx], null);
-    if (p && typeof p.then === 'function') {
-      _srWaitForEnd(myToken, function() { playNext(idx + 1); });
-    } else {
-      playNext(idx + 1);
-    }
-  }
-  playNext(0);
+  // speakJP with the button element:
+  //  - 1st click while idle    → plays,   btn shows pause icon
+  //  - 2nd click while playing → pauses,  btn shows ▶
+  //  - 3rd click while paused  → resumes, btn shows pause icon
+  //  - audio ends naturally    → btn shows ▶
+  speakJP(allText, btn).catch(function() {});
 }
 
-// Polls tts.js globals until audio finishes or token changes
-function _srWaitForEnd(token, cb) {
-  var elapsed = 0;
-  function tick() {
-    if (token !== _srPagePlayToken) return;
-    elapsed += 150;
-    if (elapsed > 120000) { _srStopPageAudio(); return; }
-    var playing = (typeof isSpeaking !== 'undefined' && isSpeaking) ||
-                  (typeof isPaused   !== 'undefined' && isPaused);
-    if (playing) setTimeout(tick, 150);
-    else         setTimeout(cb,   120);
-  }
-  setTimeout(tick, 150);
+// ─── Per-segment TTS ──────────────────────────────────────────
+// speakJP automatically stops whatever is currently playing (page or another
+// segment) before starting this segment, via the "NEW play" path in speakJP.
+function _srPlaySegment(text, btnEl) {
+  if (typeof speakJP !== 'function') return;
+  speakJP(text, btnEl).catch(function() {});
 }
 
-function _srStopPageAudio() {
-  _srPagePlayToken++;
-  _srPagePlaying = false;
-
-  // Stop tts.js engine
-  if (typeof playToken !== 'undefined') playToken++;
-  if (typeof currentGain !== 'undefined' && currentGain) {
-    try { currentGain.gain.cancelScheduledValues(0); currentGain.gain.setValueAtTime(0, 0); } catch(e) {}
-  }
-  if (typeof currentAudio !== 'undefined' && currentAudio) {
-    try { currentAudio.pause(); } catch(e) {}
-    currentAudio = null;
-  }
-  if (typeof currentGain  !== 'undefined') currentGain  = null;
-  if (typeof isSpeaking   !== 'undefined') isSpeaking   = false;
-  if (typeof isPaused     !== 'undefined') isPaused     = false;
-
-  var btn = document.getElementById('srPageAudioBtn');
-  if (btn) { btn.innerHTML = '&#9654; Play page'; btn.classList.remove('sr-page-audio-playing'); }
-}
-
-// ─── Touch swipe ──────────────────────────────────────────────
+// ─── Swipe gesture wiring ─────────────────────────────────────
 function _srWireSwipe(overlay) {
   overlay.addEventListener('touchstart', _srOnTouchStart, { passive: true });
   overlay.addEventListener('touchmove',  _srOnTouchMove,  { passive: true });

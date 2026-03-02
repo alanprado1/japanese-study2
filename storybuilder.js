@@ -955,10 +955,10 @@ function _sbFetchPageImage(sentence) {
 // Status bar updated after each page so the user sees progress.
 
 function _sbGeneratePageImages(story) {
-  // Honour the deck's image-gen toggle (set in deck settings)
-  if (typeof isImageGenEnabled !== 'function' || !isImageGenEnabled()) {
-    return Promise.resolve();
-  }
+  // Story illustrations always generate — they are part of the story itself,
+  // not the same as card images. The deck imageGen toggle is for card view only.
+  // The reader falls back to direct Pollinations URLs if images are missing,
+  // but pre-generating here gives instant display without a live API call.
 
   var pages = story.pages;
   var total = pages.length;

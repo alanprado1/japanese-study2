@@ -2020,13 +2020,19 @@ main.story-active > #lengthFilterBar {
   letter-spacing: 0.1em;
 }
 
-/* ── Story body — single flowing column ──────────────────────*/
+/* ── Story body — single flowing column ──────────────────────
+   Constrained to ~60% of viewport so the background image is
+   visible on both sides. Centered with auto margins.          */
 .sr-story-body {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 14px;
   padding: 16px 20px;
+  max-width: 62%;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
 /* ── Individual segment ──────────────────────────────────────*/
@@ -2135,7 +2141,7 @@ main.story-active > #lengthFilterBar {
 
 /* ── Mobile ───────────────────────────────────────────────────*/
 @media (max-width: 600px) {
-  .sr-story-body { padding: 12px 14px; gap: 12px; }
+  .sr-story-body { padding: 12px 14px; gap: 12px; max-width: 100%; }
   .sr-seg         { padding: 10px 40px 10px 12px; }
   .sr-nav         { padding: 8px 12px 4px; gap: 8px; }
   .sr-nav-btn     { padding: 5px 10px; font-size: 0.68rem; }
