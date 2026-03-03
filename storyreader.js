@@ -120,14 +120,10 @@ function _srRenderPage() {
   // no "Play page" text flash on navigation; speakJP overwrites with
   // ICON_PAUSE when playing, restores ICON_PLAY / &#9654; on stop.
   var furActive = (typeof showFurigana !== 'undefined' && showFurigana) ? ' active' : '';
-  var trActive  = (typeof showTranslation !== 'undefined' && showTranslation) ? ' active' : '';
+  var trActive  = _srShowTranslation ? ' active' : '';
   var playIcon  = (typeof ICON_PLAY !== 'undefined') ? ICON_PLAY : '&#9654;';
 
-  // Google Translate icon (SVG path — official GT logo shape simplified)
-  var gtSVG = '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">' +
-    '<path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0014.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/>' +
-  '</svg>';
-
+  // Translation icon: 訳 (abbreviation of 翻訳, "translation")
   var bottomHTML =
     '<div class="sr-bottom-bar">' +
       '<button class="sr-bar-btn' + furActive + '" ' +
@@ -136,15 +132,25 @@ function _srRenderPage() {
         'onclick="_srTogglePageAudio(this)" title="Play / pause whole page">' +
         playIcon +
       '</button>' +
-      '<button class="sr-bar-btn" ' +
-        'onclick="_srOpenTranslate()" title="Open in Google Translate">' +
-        gtSVG +
-      '</button>' +
+      '<button class="sr-bar-btn' + trActive + '" id="srTranslBtn" ' +
+        'onclick="_srToggleTranslation()" title="Toggle translation">訳</button>' +
     '</div>';
 
-  // ── Close button ───────────────────────────────────────────
+  // ── Close button + font size button + font panel (top-right) ──
+  // Font panel uses the global --jp-size CSS var (shared with card mode).
+  var curSize = parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue('--jp-size') || '1.4'
+  );
   var closeHTML =
-    '<button class="sr-close-btn" onclick="closeStoryReader()" title="Close (Esc)">✕</button>';
+    '<button class="sr-close-btn" onclick="closeStoryReader()" title="Close (Esc)">✕</button>' +
+    '<button class="sr-font-btn" onclick="_srToggleFontPanel()" title="Font size">A</button>' +
+    '<div class="sr-font-panel" id="srFontPanel">' +
+      '<label>FONT SIZE</label>' +
+      '<input type="range" min="0.8" max="2.4" step="0.1" ' +
+        'value="' + curSize.toFixed(1) + '" ' +
+        'oninput="_srSetFontSize(this.value)">' +
+      '<span class="sr-font-val" id="srFontVal">' + curSize.toFixed(1) + 'rem</span>' +
+    '</div>';
 
   // ── Assemble ───────────────────────────────────────────────
   overlay.innerHTML =
@@ -156,6 +162,15 @@ function _srRenderPage() {
       bottomHTML +
     '</div>';
 
+  // ── Restore translation visibility after re-render ───────────
+  // _srRenderPage rebuilds innerHTML so the sr-show-translation class is lost.
+  // Re-apply it if translation was active, then re-fetch any filler translations.
+  if (_srShowTranslation) {
+    var _content = document.querySelector('#storyReaderOverlay .sr-content');
+    if (_content) _content.classList.add('sr-show-translation');
+    _srFetchFillerTranslations();
+  }
+
   // ── Prefetch this page's audio so Play button responds instantly ───
   // prefetchJP() (tts.js) fetches + caches the audio in background.
   // By the time user clicks Play, the cache hit makes playback immediate.
@@ -164,7 +179,7 @@ function _srRenderPage() {
     var _prefetchText = page.segments
       .map(function(s) { return s.text.trim(); })
       .filter(function(t) { return t.length > 0; })
-      .join('。');
+      .join('\u3002');
     if (_prefetchText) prefetchJP(_prefetchText);
   }
 }
@@ -179,6 +194,30 @@ function _srRenderSegment(seg) {
     ? buildJPHTML(seg.text)
     : _srEsc(seg.text);
 
+  // Translation line:
+  // Anchor segments: look up English from sentences[] global (instant, no API).
+  // Filler segments: will be fetched async and injected by _srFetchTranslation().
+  //   data-sr-filler attr marks it for the async fetch; data-sr-jp carries the text.
+  var translationHTML = '';
+  if (isAnchor && seg.sentenceId) {
+    // Look up English from the global sentences array
+    var enText = '';
+    if (typeof sentences !== 'undefined') {
+      for (var i = 0; i < sentences.length; i++) {
+        if (String(sentences[i].id) === String(seg.sentenceId)) {
+          enText = sentences[i].en || '';
+          break;
+        }
+      }
+    }
+    translationHTML = '<div class="sr-seg-translation">' + _srEsc(enText) + '</div>';
+  } else if (!isAnchor) {
+    // Filler: placeholder filled async when translate is toggled on
+    var safeJP = seg.text.replace(/"/g, '&quot;');
+    translationHTML = '<div class="sr-seg-translation sr-seg-translation-filler" ' +
+      'data-sr-jp="' + safeJP + '">…</div>';
+  }
+
   // Escape text for inline onclick attribute
   var safeText = seg.text.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   var audioBtn =
@@ -189,6 +228,7 @@ function _srRenderSegment(seg) {
   return (
     '<div class="' + cls + '">' +
       '<div class="sr-seg-text">' + jpHTML + '</div>' +
+      translationHTML +
       audioBtn +
     '</div>'
   );
@@ -242,6 +282,24 @@ function _srSetBackground(overlay, story, pageIdx) {
   }
 }
 
+// ─── Font size control ────────────────────────────────────────
+function _srToggleFontPanel() {
+  var panel = document.getElementById('srFontPanel');
+  if (panel) panel.classList.toggle('open');
+}
+
+function _srSetFontSize(val) {
+  var rem = parseFloat(val).toFixed(1);
+  document.documentElement.style.setProperty('--jp-size', rem + 'rem');
+  var label = document.getElementById('srFontVal');
+  if (label) label.textContent = rem + 'rem';
+  // Persist so it survives page reload (same key as card mode)
+  try { localStorage.setItem('jpStudy_jpSize', rem + 'rem'); } catch(e) {}
+  // Update slider value in case called from outside
+  var slider = document.querySelector('#srFontPanel input[type=range]');
+  if (slider) slider.value = rem;
+}
+
 // ─── Furigana toggle ──────────────────────────────────────────
 // Flips showFurigana (global from app.js) and re-renders the current page
 // so segments immediately show/hide ruby text. Active state on button
@@ -254,19 +312,62 @@ function _srToggleFurigana() {
   _srRenderPage();
 }
 
-// ─── Google Translate opener ───────────────────────────────────
-// Opens the current page's full text in Google Translate in a new tab.
-function _srOpenTranslate() {
-  if (!currentStory) return;
-  var page = currentStory.pages[currentPageIdx];
-  if (!page) return;
-  var text = page.segments
-    .map(function(s) { return s.text.trim(); })
-    .filter(function(t) { return t.length > 0; })
-    .join(' ');
-  if (!text) return;
-  var url = 'https://translate.google.com/?sl=ja&tl=en&text=' + encodeURIComponent(text) + '&op=translate';
-  window.open(url, '_blank', 'noopener');
+// ─── Translation toggle ────────────────────────────────────────
+// Shows/hides .sr-seg-translation divs under every segment.
+// Anchor translations come from sentences[] (instant).
+// Filler translations are fetched from MyMemory API (free, no key needed)
+// and cached in _srTranslCache so switching pages doesn't re-fetch.
+var _srShowTranslation = false;
+var _srTranslCache = {};  // jp text → translated English string
+
+function _srToggleTranslation() {
+  _srShowTranslation = !_srShowTranslation;
+  var content = document.querySelector('#storyReaderOverlay .sr-content');
+  if (content) {
+    content.classList.toggle('sr-show-translation', _srShowTranslation);
+  }
+  // Update the button active state
+  var btn = document.getElementById('srTranslBtn');
+  if (btn) btn.classList.toggle('active', _srShowTranslation);
+
+  // When turning ON: fetch any unfilled filler translations
+  if (_srShowTranslation) _srFetchFillerTranslations();
+}
+
+// Fetch translations for all filler segments on the current page.
+// Uses MyMemory free API — no key needed, 500 words/day free.
+function _srFetchFillerTranslations() {
+  var fillers = document.querySelectorAll(
+    '#storyReaderOverlay .sr-seg-translation-filler[data-sr-jp]'
+  );
+  fillers.forEach(function(el) {
+    var jp = el.getAttribute('data-sr-jp');
+    if (!jp) return;
+    // Already fetched and cached
+    if (_srTranslCache[jp] !== undefined) {
+      el.textContent = _srTranslCache[jp] || '—';
+      return;
+    }
+    // Already fetching (text is not '…' placeholder or is loading)
+    if (el.getAttribute('data-sr-fetching')) return;
+    el.setAttribute('data-sr-fetching', '1');
+    el.textContent = '…';
+    var url = 'https://api.mymemory.translated.net/get?q=' +
+      encodeURIComponent(jp) + '&langpair=ja|en';
+    fetch(url)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var tr = (data && data.responseData && data.responseData.translatedText) || '—';
+        _srTranslCache[jp] = tr;
+        el.textContent = tr;
+        el.removeAttribute('data-sr-fetching');
+      })
+      .catch(function() {
+        _srTranslCache[jp] = '—';
+        el.textContent = '—';
+        el.removeAttribute('data-sr-fetching');
+      });
+  });
 }
 
 // ─── Page-level TTS ───────────────────────────────────────────

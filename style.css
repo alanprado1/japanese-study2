@@ -1947,6 +1947,61 @@ main.story-active > #lengthFilterBar {
 }
 .sr-close-btn:hover { background: var(--danger); color: #fff; }
 
+/* ── Font size control — top-right ───────────────────────────*/
+.sr-font-btn {
+  position: fixed;
+  top: 10px;
+  right: 12px;
+  z-index: 10;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--text2);
+  font-size: 0.7rem;
+  font-family: 'DM Mono', monospace;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.sr-font-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.sr-font-panel {
+  position: fixed;
+  top: 48px;
+  right: 12px;
+  z-index: 10;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  min-width: 120px;
+}
+.sr-font-panel.open { display: flex; }
+.sr-font-panel label {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  color: var(--text3);
+  letter-spacing: 0.08em;
+}
+.sr-font-panel input[type=range] {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.sr-font-val {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  color: var(--accent);
+}
+
 /* ── Title block — top of page 0, 5px from top ───────────────*/
 .sr-title-block {
   text-align: center;
@@ -1979,7 +2034,7 @@ main.story-active > #lengthFilterBar {
   flex-direction: column;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
-  /* no background — overlay carries the full-page image */
+  background: #e8650a;  /* image placeholder — visible immediately */
 }
 .sr-content::-webkit-scrollbar       { width: 4px; }
 .sr-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -2072,6 +2127,20 @@ main.story-active > #lengthFilterBar {
   line-height: 1.8;
   word-break: break-all;
 }
+
+/* Translation line under each segment — shown when translate is active */
+.sr-seg-translation {
+  display: none;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text3);
+  line-height: 1.5;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  font-style: italic;
+}
+.sr-show-translation .sr-seg-translation { display: block; }
 
 /* Furigana inside segments */
 .sr-seg-text ruby { ruby-align: center; }
