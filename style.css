@@ -1947,19 +1947,22 @@ main.story-active > #lengthFilterBar {
 }
 .sr-close-btn:hover { background: var(--danger); color: #fff; }
 
-/* ── Font size control — top-right ───────────────────────────*/
+/* ── Font size control — appended to body by JS, fixed to viewport ──
+   Position/z-index are set inline by JS so overlay stacking context
+   cannot interfere. CSS here provides only visual styling.          */
 .sr-font-btn {
   position: fixed;
   top: 10px;
   right: 12px;
-  z-index: 10;
+  z-index: 410;
   width: 32px;
   height: 32px;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--bg2);
   color: var(--text2);
-  font-size: 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 700;
   font-family: 'DM Mono', monospace;
   cursor: pointer;
   display: flex;
@@ -1971,9 +1974,9 @@ main.story-active > #lengthFilterBar {
 
 .sr-font-panel {
   position: fixed;
-  top: 48px;
+  top: 50px;
   right: 12px;
-  z-index: 10;
+  z-index: 410;
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1982,7 +1985,7 @@ main.story-active > #lengthFilterBar {
   flex-direction: column;
   gap: 6px;
   align-items: center;
-  min-width: 120px;
+  width: 130px;
 }
 .sr-font-panel.open { display: flex; }
 .sr-font-panel label {
@@ -1990,9 +1993,10 @@ main.story-active > #lengthFilterBar {
   font-size: 0.62rem;
   color: var(--text3);
   letter-spacing: 0.08em;
+  white-space: nowrap;
 }
 .sr-font-panel input[type=range] {
-  width: 100%;
+  width: 106px;
   accent-color: var(--accent);
   cursor: pointer;
 }
@@ -2004,9 +2008,14 @@ main.story-active > #lengthFilterBar {
 
 /* ── Title block — top of page 0, 5px from top ───────────────*/
 .sr-title-block {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
   text-align: center;
-  padding: 5px 50px 10px;   /* 5px top, 50px sides (clear close/right edge) */
-  flex-shrink: 0;
+  padding: 12px 56px 8px;
+  pointer-events: none;
 }
 .sr-title-ja {
   font-family: 'Noto Serif JP', serif;
@@ -2028,16 +2037,11 @@ main.story-active > #lengthFilterBar {
 /* ── Scrollable content wrapper ──────────────────────────────*/
 .sr-content {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-  background: #e8650a;  /* image placeholder — visible immediately */
+  background: #e8650a;
 }
-.sr-content::-webkit-scrollbar       { width: 4px; }
-.sr-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 /* ── Navigation bar (top) ────────────────────────────────────*/
 .sr-nav {
@@ -2076,19 +2080,56 @@ main.story-active > #lengthFilterBar {
   letter-spacing: 0.1em;
 }
 
-/* ── Story body — single flowing column ──────────────────────
-   Constrained to ~60% of viewport so the background image is
-   visible on both sides. Centered with auto margins.          */
-.sr-story-body {
+/* ── Body row — holds JP column + optional translation column ─*/
+.sr-body-row {
   flex: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: hidden;
+  gap: 10px;
+  padding: 0 16px;
+  box-sizing: border-box;
+}
+
+/* JP column — fixed width, never changes size */
+.sr-story-body {
+  width: 44%;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 16px 20px;
-  max-width: 44%;
-  width: 100%;
-  margin: 0 auto;
+  padding: 16px 4px;
   box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Translation column — same structure, appears to the right.
+   Hidden by default; toggled by .sr-show-translation on sr-content.
+   Never causes the JP column to shift or resize.               */
+.sr-transl-col {
+  width: 26%;
+  flex-shrink: 0;
+  display: none;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 4px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.sr-show-translation .sr-transl-col { display: flex; }
+
+/* One translation entry — height matches its sibling segment via min-height */
+.sr-transl-item {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  color: rgba(255,255,255,0.55);
+  line-height: 1.5;
+  font-style: italic;
+  word-break: break-word;
+  padding: 4px 6px;
+  border-left: 2px solid rgba(255,255,255,0.12);
 }
 
 /* ── Individual segment ──────────────────────────────────────*/
@@ -2128,19 +2169,7 @@ main.story-active > #lengthFilterBar {
   word-break: break-all;
 }
 
-/* Translation line under each segment — shown when translate is active */
-.sr-seg-translation {
-  display: none;
-  font-family: 'DM Mono', monospace;
-  font-size: 0.72rem;
-  color: var(--text3);
-  line-height: 1.5;
-  margin-top: 5px;
-  padding-top: 5px;
-  border-top: 1px solid rgba(255,255,255,0.08);
-  font-style: italic;
-}
-.sr-show-translation .sr-seg-translation { display: block; }
+
 
 /* Furigana inside segments */
 .sr-seg-text ruby { ruby-align: center; }
@@ -2234,7 +2263,9 @@ main.story-active > #lengthFilterBar {
 
 /* ── Mobile ───────────────────────────────────────────────────*/
 @media (max-width: 600px) {
-  .sr-story-body { padding: 12px 14px; gap: 12px; max-width: 100%; }
+  .sr-story-body { width: 90%; padding: 12px 8px; gap: 12px; }
+  .sr-transl-col  { display: none !important; }
+  .sr-body-row    { padding: 0 8px; }
   .sr-seg         { padding: 10px 40px 10px 12px; }
   .sr-nav         { padding: 8px 12px 4px; gap: 8px; }
   .sr-nav-btn     { padding: 5px 10px; font-size: 0.68rem; }
