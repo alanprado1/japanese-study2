@@ -1882,18 +1882,18 @@ main.story-active > #lengthFilterBar {
 
 /* ── Image cell ──────────────────────────────────────────────*/
 .sr-image-cell {
-  position: relative;
-  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  padding: 5px 5px 0 5px;
   background: var(--bg2);
 }
 
 /* Placeholder — always visible until a real image loads */
 .sr-image-placeholder {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  opacity: 0.5;
+  z-index: 2;
+  pointer-events: none;
   background:
     radial-gradient(ellipse at 30% 40%, var(--accent-glow) 0%, transparent 60%),
     linear-gradient(160deg, var(--bg2) 0%, var(--bg3) 100%);

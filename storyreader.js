@@ -154,22 +154,9 @@ function _srLoadImage(story, pageIdx) {
     if (isStale()) return;
     var c = document.getElementById('srImageCell');
     if (!c) return;
-    var img = document.createElement('img');
-    img.className = 'sr-image';
-    img.alt = '';
-    img.onload = function() {
-      if (isStale()) return;
-      // Remove placeholder once image is painted
-      var ph = c.querySelector('.sr-image-placeholder');
-      if (ph) ph.style.display = 'none';
-      img.classList.add('sr-image-loaded');
-    };
-    img.onerror = function() {
-      // Image element failed — remove it, placeholder stays
-      if (img.parentNode) img.parentNode.removeChild(img);
-    };
-    c.appendChild(img);
-    img.src = src; // set src AFTER appending so onload fires reliably
+    c.style.backgroundImage = `url(${src})`;
+    var ph = c.querySelector('.sr-image-placeholder');
+    if (ph) ph.style.opacity = '0.5';
   }
 
   function tryPollinations() {
