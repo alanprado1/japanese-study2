@@ -75,51 +75,40 @@ function _srRenderPage() {
   var isFirst  = pageIdx === 0;
   var isLast   = pageIdx === total - 1;
 
-  var titleHTML = '';
-  if (isFirst) {
-    titleHTML =
-      '<div class="sr-title-block">' +
-        '<div class="sr-title-ja">' + _srEsc(story.title   || '') + '</div>' +
-        '<div class="sr-title-en">' + _srEsc(story.titleEn || '') + '</div>' +
-      '</div>';
-  }
+  var titleHTML = isFirst ? 
+    '<div class="sr-title-block">' +
+      '<div class="sr-title-ja">' + _srEsc(story.title || '') + '</div>' +
+      '<div class="sr-title-en">' + _srEsc(story.titleEn || '') + '</div>' +
+    '</div>' : '';
 
   var prevDis = isFirst ? ' disabled' : '';
   var nextDis = isLast  ? ' disabled' : '';
-  var navHTML =
+  var navHTML = 
     '<div class="sr-nav">' +
-      '<button class="sr-nav-btn" onclick="_srGoTo(' + (pageIdx - 1) + ')"' + prevDis + '>← Prev</button>' +
-      '<div class="sr-page-counter">' + (pageIdx + 1) + ' / ' + total + '</div>' +
-      '<button class="sr-nav-btn" onclick="_srGoTo(' + (pageIdx + 1) + ')"' + nextDis + '>Next →</button>' +
+      '<button class="sr-nav-btn" onclick="_srGoTo(' + (pageIdx-1) + ')"' + prevDis + '>← Prev</button>' +
+      '<div class="sr-page-counter">' + (pageIdx+1) + ' / ' + total + '</div>' +
+      '<button class="sr-nav-btn" onclick="_srGoTo(' + (pageIdx+1) + ')"' + nextDis + '>Next →</button>' +
     '</div>';
 
   var bodyHTML = '<div class="sr-story-body">';
-  for (var i = 0; i < segments.length; i++) { bodyHTML += _srRenderSegment(segments[i]); }
+  for (var i = 0; i < segments.length; i++) bodyHTML += _srRenderSegment(segments[i]);
   bodyHTML += '</div>';
 
-  var bottomHTML =
+  var bottomHTML = 
     '<div class="sr-bottom-bar">' +
-      '<button class="sr-page-audio-btn" id="srPageAudioBtn" ' +
-        'onclick="_srTogglePageAudio(this)" title="Play / pause whole page">' +
-        '&#9654; Play page' +
-      '</button>' +
+      '<button class="sr-page-audio-btn" id="srPageAudioBtn" onclick="_srTogglePageAudio(this)">▶ Play page</button>' +
     '</div>';
 
-  var closeHTML =
-    '<button class="sr-close-btn" onclick="closeStoryReader()" title="Close (Esc)">✕</button>';
+  var closeHTML = '<button class="sr-close-btn" onclick="closeStoryReader()">✕</button>';
 
-  overlay.innerHTML =
-    closeHTML +
-    '<div class="sr-grid" id="srGrid" style="margin:5px 5px 0 5px;background-size:cover;background-position:center;">' +
-      '<div class="sr-text-cell" style="opacity:0.5;text-align:center;background:transparent !important;">' +
-        titleHTML +
-        navHTML +
-        bodyHTML +
-        bottomHTML +
-      '</div>' +
+  // Simple structure: overlay = background image
+  // inner content wrapper = 50% opacity text, centered, with your 5px margins
+  overlay.innerHTML = closeHTML + 
+    '<div id="srContent" style="margin:5px 5px 0 5px;opacity:0.5;text-align:center;background:transparent;">' +
+      titleHTML + navHTML + bodyHTML + bottomHTML +
     '</div>';
 
-  _srLoadImage(story, pageIdx);
+  _srLoadImage(story, pageIdx);   // now sets background on overlay
   _srPrefetchPageAudio(page);
 }
 
@@ -129,57 +118,54 @@ function _srRenderPage() {
 // Path 2: Pollinations fetch → show <img> when loaded, cache in IDB.
 // Path 3: Fetch fails → placeholder stays visible, no blank void.
 function _srLoadImage(story, pageIdx) {
-  var grid = document.querySelector('.sr-grid');
-  if (!grid) return;
+  var overlay = document.getElementById('storyReaderOverlay');
+  if (!overlay) return;
 
   var idbKey = story.id + '_p' + pageIdx;
-  var storyRef = story;
-  var pageRef = pageIdx;
 
   function isStale() {
-    return currentStory !== storyRef || currentPageIdx !== pageRef;
+    return currentStory !== story || currentPageIdx !== pageIdx;
   }
 
   function showImage(src) {
     if (isStale()) return;
-    grid.style.backgroundImage = `url(${src})`;
+    overlay.style.backgroundImage = `url(${src})`;
+    overlay.style.backgroundSize = 'cover';
+    overlay.style.backgroundPosition = 'center';
+  }
+
+  // Try cache first, then Pollinations
+  if (typeof _idbGet === 'function') {
+    _idbGet(idbKey).then(function(record) {
+      if (isStale()) return;
+      if (record && record.dataUrl) return showImage(record.dataUrl);
+      tryPollinations();
+    }).catch(tryPollinations);
+  } else {
+    tryPollinations();
   }
 
   function tryPollinations() {
     if (typeof _buildPrimaryUrl !== 'function') return;
-    var descText = story.titleEn || story.title || '';
+    var desc = story.titleEn || story.title || '';
     var pg = story.pages && story.pages[pageIdx];
     if (pg && pg.segments) {
       for (var i = 0; i < pg.segments.length; i++) {
         if (pg.segments[i].type === 'filler') {
-          descText = pg.segments[i].text.slice(0, 90);
+          desc = pg.segments[i].text.slice(0, 90);
           break;
         }
       }
     }
-    var url = _buildPrimaryUrl({ id: idbKey, en: descText, jp: descText });
+    var url = _buildPrimaryUrl({ id: idbKey, en: desc, jp: desc });
     _srUrlToDataUrl(url, function(dataUrl) {
-      if (isStale()) return;
-      if (dataUrl) {
-        if (typeof _idbSet === 'function') _idbSet(idbKey, dataUrl);
-        showImage(dataUrl);
-      }
+      if (isStale() || !dataUrl) return;
+      if (typeof _idbSet === 'function') _idbSet(idbKey, dataUrl);
+      showImage(dataUrl);
     });
   }
-
-  if (typeof _idbGet === 'function') {
-    _idbGet(idbKey).then(function(record) {
-      if (isStale()) return;
-      if (record) {
-        var url = typeof record === 'string' ? record : (record && record.dataUrl);
-        if (url) { showImage(url); return; }
-      }
-      tryPollinations();
-    }).catch(function() { if (!isStale()) tryPollinations(); });
-  } else {
-    tryPollinations();
-  }
 }
+
 
 
 // Fetch a URL and convert to data URL, async, no-throw

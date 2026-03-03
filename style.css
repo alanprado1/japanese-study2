@@ -1885,7 +1885,10 @@ main.story-active > #lengthFilterBar {
   background: transparent !important;
 }
 
-
+#storyReaderOverlay {
+  background-size: cover;
+  background-position: center;
+}
 
 
 /* Placeholder — always visible until a real image loads */
