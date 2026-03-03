@@ -1878,13 +1878,15 @@ main.story-active > #lengthFilterBar {
   background-position: center;
   margin: 5px 5px 0 5px;
 }
-
 /* ── Image cell ──────────────────────────────────────────────*/
 .sr-text-cell {
   opacity: 0.5;
   text-align: center;
-  background: var(--bg2);
+  background: transparent !important;
 }
+
+
+
 
 /* Placeholder — always visible until a real image loads */
 .sr-image-placeholder {

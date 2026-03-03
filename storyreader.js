@@ -108,17 +108,10 @@ function _srRenderPage() {
   var closeHTML =
     '<button class="sr-close-btn" onclick="closeStoryReader()" title="Close (Esc)">✕</button>';
 
-  // ── Two-column grid layout ──
-  // Left cell:  image panel (srImageCell) — plain div, no z-index tricks
-  // Right cell: text panel (sr-text-cell) — scrollable, naturally in front
   overlay.innerHTML =
-    overlay.innerHTML =
     closeHTML +
-    '<div class="sr-grid" style="margin:5px 5px 0 5px;background-size:cover;background-position:center;">' +
-      '<div class="sr-image-cell" id="srImageCell" style="display:none;">' +
-        '<div class="sr-image-placeholder"><span>絵</span></div>' +
-      '</div>' +
-      '<div class="sr-text-cell" style="opacity:0.5;text-align:center;">' +
+    '<div class="sr-grid" id="srGrid" style="margin:5px 5px 0 5px;background-size:cover;background-position:center;">' +
+      '<div class="sr-text-cell" style="opacity:0.5;text-align:center;background:transparent !important;">' +
         titleHTML +
         navHTML +
         bodyHTML +
@@ -126,10 +119,7 @@ function _srRenderPage() {
       '</div>' +
     '</div>';
 
-  // Load image into the left cell
   _srLoadImage(story, pageIdx);
-
-  // Prefetch this page's TTS audio so Play button responds immediately
   _srPrefetchPageAudio(page);
 }
 
