@@ -689,18 +689,6 @@ function nextCard() {
 
 // ─── init ────────────────────────────────────────────────────
 initDecks();         // decks.js  — loads deck data into globals (sentences, srsData, currentIdx)
-
-// Restore the length filter persisted from the last session.
-// Must run AFTER initDecks() (needs sentences[]) and BEFORE render().
-// currentIdx was saved as a filtered-list index, so the filter must be
-// restored first — then currentIdx is correct for the same filtered set.
-(function() {
-  try {
-    var saved = localStorage.getItem('jpStudy_lengthFilter');
-    if (saved) currentLengthFilter = saved;
-  } catch(e) {}
-})();
-
 loadUIPrefs();       // ui.js     — restores theme, font, toggles, and sets isListView
 loadVoicePref();     // tts.js    — restores selected voice
 loadFuriganaCache(); // load cached furigana readings from localStorage
