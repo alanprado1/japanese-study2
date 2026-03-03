@@ -114,13 +114,31 @@ function _srRenderPage() {
   }
   bodyHTML += '</div>';
 
-  // ── Bottom bar: page audio button ─────────────────────────
-  // Button is passed to speakJP — it manages innerHTML (▶ / pause-icon) itself.
+  // ── Bottom bar: play icon + furigana toggle + translate button ───
+  // ICON_PLAY is defined in tts.js (loaded before storyreader.js).
+  // Using the same SVG var means the button always looks like the icon —
+  // no "Play page" text flash on navigation; speakJP overwrites with
+  // ICON_PAUSE when playing, restores ICON_PLAY / &#9654; on stop.
+  var furActive = (typeof showFurigana !== 'undefined' && showFurigana) ? ' active' : '';
+  var trActive  = (typeof showTranslation !== 'undefined' && showTranslation) ? ' active' : '';
+  var playIcon  = (typeof ICON_PLAY !== 'undefined') ? ICON_PLAY : '&#9654;';
+
+  // Google Translate icon (SVG path — official GT logo shape simplified)
+  var gtSVG = '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">' +
+    '<path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0014.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/>' +
+  '</svg>';
+
   var bottomHTML =
     '<div class="sr-bottom-bar">' +
+      '<button class="sr-bar-btn' + furActive + '" ' +
+        'onclick="_srToggleFurigana()" title="Toggle furigana">振</button>' +
       '<button class="sr-page-audio-btn" id="srPageAudioBtn" ' +
         'onclick="_srTogglePageAudio(this)" title="Play / pause whole page">' +
-        '&#9654; Play page' +
+        playIcon +
+      '</button>' +
+      '<button class="sr-bar-btn" ' +
+        'onclick="_srOpenTranslate()" title="Open in Google Translate">' +
+        gtSVG +
       '</button>' +
     '</div>';
 
@@ -137,6 +155,18 @@ function _srRenderPage() {
       bodyHTML +
       bottomHTML +
     '</div>';
+
+  // ── Prefetch this page's audio so Play button responds instantly ───
+  // prefetchJP() (tts.js) fetches + caches the audio in background.
+  // By the time user clicks Play, the cache hit makes playback immediate.
+  // Only runs for Google provider (ElevenLabs charges per character).
+  if (page && typeof prefetchJP === 'function') {
+    var _prefetchText = page.segments
+      .map(function(s) { return s.text.trim(); })
+      .filter(function(t) { return t.length > 0; })
+      .join('。');
+    if (_prefetchText) prefetchJP(_prefetchText);
+  }
 }
 
 // ─── Render one segment ───────────────────────────────────────
@@ -210,6 +240,33 @@ function _srSetBackground(overlay, story, pageIdx) {
   } else {
     tryPollinations();
   }
+}
+
+// ─── Furigana toggle ──────────────────────────────────────────
+// Flips showFurigana (global from app.js) and re-renders the current page
+// so segments immediately show/hide ruby text. Active state on button
+// is baked into bottomHTML at render time via furActive class.
+function _srToggleFurigana() {
+  if (typeof showFurigana !== 'undefined') {
+    showFurigana = !showFurigana;
+    try { localStorage.setItem('jpStudy_furigana', showFurigana); } catch(e) {}
+  }
+  _srRenderPage();
+}
+
+// ─── Google Translate opener ───────────────────────────────────
+// Opens the current page's full text in Google Translate in a new tab.
+function _srOpenTranslate() {
+  if (!currentStory) return;
+  var page = currentStory.pages[currentPageIdx];
+  if (!page) return;
+  var text = page.segments
+    .map(function(s) { return s.text.trim(); })
+    .filter(function(t) { return t.length > 0; })
+    .join(' ');
+  if (!text) return;
+  var url = 'https://translate.google.com/?sl=ja&tl=en&text=' + encodeURIComponent(text) + '&op=translate';
+  window.open(url, '_blank', 'noopener');
 }
 
 // ─── Page-level TTS ───────────────────────────────────────────
