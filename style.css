@@ -1874,26 +1874,25 @@ main.story-active > #lengthFilterBar {
    Two columns: image | text
    Image column is fixed-width; text column takes the rest.   */
 .sr-grid {
-  display: grid;
-  grid-template-columns: 420px 1fr;
-  height: 100%;
-  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  margin: 5px 5px 0 5px;
 }
 
 /* ── Image cell ──────────────────────────────────────────────*/
-.sr-image-cell {
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  padding: 5px 5px 0 5px;
+.sr-text-cell {
+  opacity: 0.5;
+  text-align: center;
   background: var(--bg2);
 }
 
 /* Placeholder — always visible until a real image loads */
 .sr-image-placeholder {
-  opacity: 0.5;
-  z-index: 2;
-  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background:
     radial-gradient(ellipse at 30% 40%, var(--accent-glow) 0%, transparent 60%),
     linear-gradient(160deg, var(--bg2) 0%, var(--bg3) 100%);

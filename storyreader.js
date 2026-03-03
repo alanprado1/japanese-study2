@@ -112,12 +112,13 @@ function _srRenderPage() {
   // Left cell:  image panel (srImageCell) — plain div, no z-index tricks
   // Right cell: text panel (sr-text-cell) — scrollable, naturally in front
   overlay.innerHTML =
+    overlay.innerHTML =
     closeHTML +
-    '<div class="sr-grid">' +
-      '<div class="sr-image-cell" id="srImageCell">' +
+    '<div class="sr-grid" style="margin:5px 5px 0 5px;background-size:cover;background-position:center;">' +
+      '<div class="sr-image-cell" id="srImageCell" style="display:none;">' +
         '<div class="sr-image-placeholder"><span>絵</span></div>' +
       '</div>' +
-      '<div class="sr-text-cell">' +
+      '<div class="sr-text-cell" style="opacity:0.5;text-align:center;">' +
         titleHTML +
         navHTML +
         bodyHTML +
@@ -138,29 +139,24 @@ function _srRenderPage() {
 // Path 2: Pollinations fetch → show <img> when loaded, cache in IDB.
 // Path 3: Fetch fails → placeholder stays visible, no blank void.
 function _srLoadImage(story, pageIdx) {
-  var cell = document.getElementById('srImageCell');
-  if (!cell) return;
+  var grid = document.querySelector('.sr-grid');
+  if (!grid) return;
 
-  var idbKey   = story.id + '_p' + pageIdx;
+  var idbKey = story.id + '_p' + pageIdx;
   var storyRef = story;
-  var pageRef  = pageIdx;
+  var pageRef = pageIdx;
 
   function isStale() {
     return currentStory !== storyRef || currentPageIdx !== pageRef;
   }
 
-  // Replace the placeholder div with a real <img>
   function showImage(src) {
     if (isStale()) return;
-    var c = document.getElementById('srImageCell');
-    if (!c) return;
-    c.style.backgroundImage = `url(${src})`;
-    var ph = c.querySelector('.sr-image-placeholder');
-    if (ph) ph.style.opacity = '0.5';
+    grid.style.backgroundImage = `url(${src})`;
   }
 
   function tryPollinations() {
-    if (typeof _buildPrimaryUrl !== 'function') return; // placeholder stays
+    if (typeof _buildPrimaryUrl !== 'function') return;
     var descText = story.titleEn || story.title || '';
     var pg = story.pages && story.pages[pageIdx];
     if (pg && pg.segments) {
@@ -172,18 +168,15 @@ function _srLoadImage(story, pageIdx) {
       }
     }
     var url = _buildPrimaryUrl({ id: idbKey, en: descText, jp: descText });
-    // Fetch as blob → dataURL so we can cache it in IDB
     _srUrlToDataUrl(url, function(dataUrl) {
       if (isStale()) return;
       if (dataUrl) {
         if (typeof _idbSet === 'function') _idbSet(idbKey, dataUrl);
         showImage(dataUrl);
       }
-      // No dataUrl = fetch failed, placeholder stays
     });
   }
 
-  // Try IDB first
   if (typeof _idbGet === 'function') {
     _idbGet(idbKey).then(function(record) {
       if (isStale()) return;
@@ -197,6 +190,7 @@ function _srLoadImage(story, pageIdx) {
     tryPollinations();
   }
 }
+
 
 // Fetch a URL and convert to data URL, async, no-throw
 function _srUrlToDataUrl(url, cb) {
