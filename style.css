@@ -1979,6 +1979,7 @@ main.story-active > #lengthFilterBar {
   flex-direction: column;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
+  background: #e8650a;  /* placeholder — bright orange, easy to see */
 }
 .sr-content::-webkit-scrollbar       { width: 4px; }
 .sr-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
