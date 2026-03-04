@@ -225,9 +225,9 @@ function _srRenderPage() {
 // Returns an array of cell objects:
 //   { text, dominant, anchorChars, fillerChars, anchorSegIds }
 //
-var _SR_TARGET_CHARS  = 15;   // ideal cell length (clause-break threshold)
-var _SR_MAX_CHARS     = 25;   // hard ceiling before forced break
-var _SR_MIN_SENTENCE  = 10;   // minimum chars before a sentence-end triggers a break
+var _SR_TARGET_CHARS  = 20;   // ideal cell length → ~6 cells per 120-char page
+var _SR_MAX_CHARS     = 32;   // hard ceiling before forced break
+var _SR_MIN_SENTENCE  = 15;   // minimum chars before a sentence-end triggers a break
 var _SR_SENTENCE_END  = { '。':1, '！':1, '？':1, '…':1 };
 var _SR_CLAUSE_BREAK  = { '、':1, '，':1 };
 
@@ -289,12 +289,31 @@ function _srSliceCells(segs) {
 
     var dominant = aCnt > fCnt ? 'anchor' : (fCnt > aCnt ? 'filler' : 'mixed');
 
+    // Build runs: consecutive same-type chars → [{text, type}]
+    // Used by _srRenderCell to wrap anchor/filler text in separate spans.
+    var runs = [];
+    if (cellChars.length) {
+      var rType = cellChars[0].type;
+      var rText = cellChars[0].ch;
+      for (var r = 1; r < cellChars.length; r++) {
+        if (cellChars[r].type === rType) {
+          rText += cellChars[r].ch;
+        } else {
+          runs.push({ text: rText, type: rType });
+          rType = cellChars[r].type;
+          rText = cellChars[r].ch;
+        }
+      }
+      runs.push({ text: rText, type: rType });
+    }
+
     cells.push({
       text:        cellText,
       dominant:    dominant,
       anchorChars: aCnt,
       fillerChars: fCnt,
-      anchorIds:   anchorIds
+      anchorIds:   anchorIds,
+      runs:        runs
     });
 
     pos = end;
@@ -304,17 +323,37 @@ function _srSliceCells(segs) {
 }
 
 // ─── Render one cell ─────────────────────────────────────────
-// Uses buildJPHTML for furigana. Cell class reflects dominant type.
+// Each run is a <span> — anchor runs get font-weight:700 via .sr-run-anchor,
+// filler runs get normal weight + slight opacity via .sr-run-filler.
+// buildJPHTML is called per run so furigana applies correctly within each span.
 function _srRenderCell(cell) {
-  var cls = 'sr-seg ' + (
-    cell.dominant === 'anchor' ? 'sr-seg-anchor' :
-    cell.dominant === 'filler' ? 'sr-seg-filler' :
-    'sr-seg-mixed'
-  );
+  var cls = 'sr-seg sr-seg-' + cell.dominant;
 
-  var jpHTML = (typeof buildJPHTML === 'function')
-    ? buildJPHTML(cell.text)
-    : _srEsc(cell.text);
+  var innerText;
+  if (cell.runs && cell.runs.length > 1) {
+    // Multiple runs: wrap each in a typed span
+    innerText = '';
+    for (var ri = 0; ri < cell.runs.length; ri++) {
+      var run    = cell.runs[ri];
+      var rClass = run.type === 'anchor' ? 'sr-run-anchor' : 'sr-run-filler';
+      var rHTML  = (typeof buildJPHTML === 'function')
+        ? buildJPHTML(run.text)
+        : _srEsc(run.text);
+      innerText += '<span class="' + rClass + '">' + rHTML + '</span>';
+    }
+  } else if (cell.runs && cell.runs.length === 1) {
+    // Single run: still wrap for consistent weight
+    var rClass = cell.runs[0].type === 'anchor' ? 'sr-run-anchor' : 'sr-run-filler';
+    var rHTML  = (typeof buildJPHTML === 'function')
+      ? buildJPHTML(cell.runs[0].text)
+      : _srEsc(cell.runs[0].text);
+    innerText = '<span class="' + rClass + '">' + rHTML + '</span>';
+  } else {
+    // Fallback: no runs data
+    innerText = (typeof buildJPHTML === 'function')
+      ? buildJPHTML(cell.text)
+      : _srEsc(cell.text);
+  }
 
   var safeText = cell.text.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   var audioBtn =
@@ -324,7 +363,7 @@ function _srRenderCell(cell) {
 
   return (
     '<div class="' + cls + '">' +
-      '<div class="sr-seg-text">' + jpHTML + '</div>' +
+      '<div class="sr-seg-text">' + innerText + '</div>' +
       audioBtn +
     '</div>'
   );

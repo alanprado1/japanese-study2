@@ -2052,7 +2052,7 @@ main.story-active > #lengthFilterBar {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 16px 6px;
+  padding: 10px 52px 6px;  /* 52px = 44px button zone + 8px gap, clears ✕ and A btn */
   flex-shrink: 0;
 }
 
@@ -2135,46 +2135,44 @@ main.story-active > #lengthFilterBar {
   border-left: 2px solid rgba(255,255,255,0.12);
 }
 
-/* ── Segment cells — each cell is a ~15-char audio chunk ────────
-   Cells are styled by dominant content type:
-     sr-seg-anchor → cell is majority anchor text (study sentence)
-     sr-seg-filler → cell is majority filler (connective prose)
-     sr-seg-mixed  → cell spans an anchor↔filler boundary        */
-.sr-seg {
+/* ── Segment cells — all share the filler look ──────────────────
+   All cells use the same subtle dark bg + faint border.
+   Anchor vs filler text is distinguished by font-weight only:
+     .sr-run-anchor  bold (700)  — study sentence text
+     .sr-run-filler  normal (400) — connective prose               */
+.sr-seg,
+.sr-seg-anchor,
+.sr-seg-filler,
+.sr-seg-mixed {
   position: relative;
   border-radius: 8px;
   padding: 10px 44px 10px 14px;
-}
-
-.sr-seg-anchor {
-  background: var(--highlight);
-  border: 1px solid var(--accent);
-}
-
-.sr-seg-filler {
   background: rgba(0, 0, 0, 0.18);
   border: 1px solid rgba(255, 255, 255, 0.10);
 }
 
-.sr-seg-mixed {
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(var(--accent-rgb, 120,120,200), 0.3);
-}
-
-/* Segment text — shared by all cell types */
+/* Segment text container */
 .sr-seg-text {
   font-family: 'Noto Sans JP', 'Noto Serif JP', sans-serif;
   font-size: var(--jp-size, 1.4rem);
-  font-weight: var(--jp-weight, 400);
   line-height: 1.8;
   word-break: break-all;
   color: var(--text);
 }
-.sr-seg-filler .sr-seg-text {
-  color: rgba(255,255,255,0.65);
+
+/* Anchor run — bold so study words stand out */
+.sr-run-anchor {
+  font-weight: 700;
 }
-[data-theme="light"] .sr-seg-filler .sr-seg-text {
-  color: rgba(0,0,0,0.55);
+/* Furigana above anchor stays light so it doesn't overpower */
+.sr-run-anchor rt {
+  font-weight: 400;
+}
+
+/* Filler run — normal weight, slightly dimmed */
+.sr-run-filler {
+  font-weight: 400;
+  opacity: 0.7;
 }
 
 
