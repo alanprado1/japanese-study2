@@ -139,7 +139,7 @@ header {
   justify-content: space-between;
   padding: 18px 32px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg2);
+  /*background: var(--bg2);*/
   backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
