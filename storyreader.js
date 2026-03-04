@@ -108,10 +108,13 @@ function _srRenderPage() {
       '<button class="sr-nav-btn" onclick="_srGoTo(' + (pageIdx + 1) + ')"' + nextDis + '>Next →</button>' +
     '</div>';
 
-  // ── Story segments ─────────────────────────────────────────
+  // ── Story segments — grouped into mixed anchor+filler cells ──
+  // _srGroupSegments() clusters segments so each cell has one anchor
+  // with its surrounding filler, keeping anchor text dominant.
+  var groups = _srGroupSegments(segments);
   var bodyHTML = '<div class="sr-story-body">';
-  for (var i = 0; i < segments.length; i++) {
-    bodyHTML += _srRenderSegment(segments[i]);
+  for (var i = 0; i < groups.length; i++) {
+    bodyHTML += _srRenderGroup(groups[i]);
   }
   bodyHTML += '</div>';
 
@@ -136,26 +139,32 @@ function _srRenderPage() {
         'onclick="_srToggleTranslation()" title="Toggle translation">訳</button>' +
     '</div>';
 
-  // ── Translation column (sibling of story body, right side) ──
-  // Built from the same segments; absolutely positioned so it never
-  // moves or resizes the JP column when toggled.
+  // ── Translation column — one item per GROUP (not per segment) ──
   var translHTML = '<div class="sr-transl-col">';
-  for (var ti = 0; ti < segments.length; ti++) {
-    var seg = segments[ti];
-    var enText = '';
-    if (seg.type === 'anchor' && seg.sentenceId && typeof sentences !== 'undefined') {
-      for (var si = 0; si < sentences.length; si++) {
-        if (String(sentences[si].id) === String(seg.sentenceId)) {
-          enText = sentences[si].en || '';
-          break;
+  for (var ti = 0; ti < groups.length; ti++) {
+    var grp = groups[ti];
+    // Find the anchor segment in this group (if any) for instant English lookup
+    var grpEnText = '';
+    var grpFillerJP = '';
+    for (var gi = 0; gi < grp.length; gi++) {
+      if (grp[gi].type === 'anchor' && grp[gi].sentenceId && typeof sentences !== 'undefined') {
+        for (var si = 0; si < sentences.length; si++) {
+          if (String(sentences[si].id) === String(grp[gi].sentenceId)) {
+            grpEnText = sentences[si].en || '';
+            break;
+          }
         }
+      } else if (grp[gi].type !== 'anchor' && !grpFillerJP) {
+        grpFillerJP = grp[gi].text;
       }
     }
-    var safeJP = (seg.type !== 'anchor') ? seg.text.replace(/"/g, '&quot;') : '';
+    // Show anchor English if available; filler items get async translation
+    var hasAnchorEn = grpEnText.length > 0;
+    var safeJP = !hasAnchorEn && grpFillerJP ? grpFillerJP.replace(/"/g, '&quot;') : '';
     translHTML +=
-      '<div class="sr-transl-item' + (seg.type === 'anchor' ? ' sr-transl-anchor' : ' sr-transl-filler') + '"' +
+      '<div class="sr-transl-item' + (!hasAnchorEn && safeJP ? ' sr-transl-filler' : '') + '"' +
         (safeJP ? ' data-sr-jp="' + safeJP + '"' : '') + '>' +
-        (enText ? _srEsc(enText) : (seg.type !== 'anchor' ? '…' : '')) +
+        (hasAnchorEn ? _srEsc(grpEnText) : (safeJP ? '…' : '')) +
       '</div>';
   }
   translHTML += '</div>';
@@ -200,26 +209,74 @@ function _srRenderPage() {
   }
 }
 
-// ─── Render one segment ───────────────────────────────────────
-function _srRenderSegment(seg) {
-  var isAnchor = seg.type === 'anchor';
-  var cls      = 'sr-seg ' + (isAnchor ? 'sr-seg-anchor' : 'sr-seg-filler');
+// ─── Group segments into anchor-dominant cells ────────────────
+// Each group = one visual cell with one audio button.
+// Rule: each anchor starts a new group; filler after an anchor
+// joins that group; filler before any anchor is buffered and prepended
+// to the first anchor group. One anchor per group maximum.
+function _srGroupSegments(segs) {
+  var groups   = [];
+  var pending  = [];   // filler segments waiting for the next anchor
 
-  // buildJPHTML adds furigana and wires lookupWord() click handlers
-  var jpHTML = (typeof buildJPHTML === 'function')
-    ? buildJPHTML(seg.text)
-    : _srEsc(seg.text);
+  for (var i = 0; i < segs.length; i++) {
+    var s = segs[i];
+    if (s.type === 'anchor') {
+      // Start a new group: pending filler + this anchor
+      var grp = pending.concat([s]);
+      pending = [];
+      // Absorb immediately following filler segments into this group
+      while (i + 1 < segs.length && segs[i + 1].type !== 'anchor') {
+        i++;
+        grp.push(segs[i]);
+      }
+      groups.push(grp);
+    } else {
+      // Filler before an anchor → buffer it
+      pending.push(s);
+    }
+  }
+  // Any leftover filler (page has only fillers — edge case)
+  if (pending.length > 0) {
+    if (groups.length > 0) {
+      // Append to last group
+      groups[groups.length - 1] = groups[groups.length - 1].concat(pending);
+    } else {
+      groups.push(pending);
+    }
+  }
+  return groups;
+}
 
-  // Escape text for inline onclick attribute
-  var safeText = seg.text.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  var audioBtn =
+// ─── Render one group (cell) ──────────────────────────────────
+// Each cell has all its segments rendered inline with distinct styles.
+// One audio button plays the concatenated text of all segments.
+function _srRenderGroup(grp) {
+  var innerHTML = '';
+  var allTexts  = [];
+
+  for (var i = 0; i < grp.length; i++) {
+    var seg      = grp[i];
+    var isAnchor = seg.type === 'anchor';
+    var jpHTML   = (typeof buildJPHTML === 'function')
+      ? buildJPHTML(seg.text)
+      : _srEsc(seg.text);
+
+    innerHTML += '<span class="' + (isAnchor ? 'sr-inline-anchor' : 'sr-inline-filler') + '">' +
+      jpHTML + '</span>';
+    allTexts.push(seg.text.trim());
+  }
+
+  // Audio button plays entire group text concatenated
+  var groupText = allTexts.filter(function(t){ return t; }).join('。');
+  var safeText  = groupText.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  var audioBtn  =
     '<button class="sr-seg-audio-btn" ' +
       'onclick="event.stopPropagation();_srPlaySegment(\'' + safeText + '\',this)" ' +
       'title="Play">&#9654;</button>';
 
   return (
-    '<div class="' + cls + '">' +
-      '<div class="sr-seg-text">' + jpHTML + '</div>' +
+    '<div class="sr-seg">' +
+      innerHTML +
       audioBtn +
     '</div>'
   );
@@ -279,12 +336,19 @@ function _srSetBackground(overlay, story, pageIdx) {
 // overlay (z-index:400). The overlay's > * { position:relative } rule
 // CANNOT affect them here. Shown/hidden via _srMountFontControls().
 
+// Outside-click listener reference — stored so we can remove it on unmount.
+var _srFontOutsideClickHandler = null;
+
 function _srMountFontControls() {
   // Remove any previous instance (page re-render)
   var old = document.getElementById('srFontBtn');
   if (old) old.remove();
   var oldP = document.getElementById('srFontPanel');
   if (oldP) oldP.remove();
+  if (_srFontOutsideClickHandler) {
+    document.removeEventListener('click', _srFontOutsideClickHandler, true);
+    _srFontOutsideClickHandler = null;
+  }
 
   var curSize = parseFloat(
     getComputedStyle(document.documentElement).getPropertyValue('--jp-size') || '1.4'
@@ -295,7 +359,6 @@ function _srMountFontControls() {
   btn.className = 'sr-font-btn';
   btn.title = 'Font size';
   btn.textContent = 'A';
-  btn.onclick = _srToggleFontPanel;
   document.body.appendChild(btn);
 
   var panel = document.createElement('div');
@@ -307,9 +370,31 @@ function _srMountFontControls() {
       'oninput="_srSetFontSize(this.value)">' +
     '<span class="sr-font-val" id="srFontVal">' + curSize.toFixed(1) + 'rem</span>';
   document.body.appendChild(panel);
+
+  // Toggle on btn click — stopPropagation prevents the outside-click handler
+  // from immediately closing the panel on the same click that opens it.
+  btn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    panel.classList.toggle('open');
+  });
+
+  // Outside-click: close panel when clicking anywhere outside btn or panel.
+  // Uses capture phase so it fires before any other handlers.
+  _srFontOutsideClickHandler = function(e) {
+    if (panel.classList.contains('open') &&
+        !btn.contains(e.target) &&
+        !panel.contains(e.target)) {
+      panel.classList.remove('open');
+    }
+  };
+  document.addEventListener('click', _srFontOutsideClickHandler, true);
 }
 
 function _srUnmountFontControls() {
+  if (_srFontOutsideClickHandler) {
+    document.removeEventListener('click', _srFontOutsideClickHandler, true);
+    _srFontOutsideClickHandler = null;
+  }
   var btn = document.getElementById('srFontBtn');
   if (btn) btn.remove();
   var panel = document.getElementById('srFontPanel');

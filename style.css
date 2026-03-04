@@ -139,7 +139,7 @@ header {
   justify-content: space-between;
   padding: 18px 32px;
   border-bottom: 1px solid var(--border);
-  /*background: var(--bg2);*/
+  background: var(--bg2);
   backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
@@ -1927,8 +1927,11 @@ main.story-active > #lengthFilterBar {
 #storyReaderOverlay > * { position: relative; z-index: 1; }
 
 /* ── Close button — top-left ─────────────────────────────────*/
-.sr-close-btn {
-  position: fixed;
+/* Higher specificity (1,1,0) beats the > * rule (1,0,0) that forces
+   position:relative on overlay children. position:absolute removes the
+   close button from the flex flow so sr-content fills the full overlay. */
+#storyReaderOverlay .sr-close-btn {
+  position: absolute;
   top: 10px;
   left: 12px;
   z-index: 10;
@@ -1945,7 +1948,7 @@ main.story-active > #lengthFilterBar {
   justify-content: center;
   transition: background 0.15s, color 0.15s;
 }
-.sr-close-btn:hover { background: var(--danger); color: #fff; }
+#storyReaderOverlay .sr-close-btn:hover { background: var(--danger); color: #fff; }
 
 /* ── Font size control — appended to body by JS, fixed to viewport ──
    Position/z-index are set inline by JS so overlay stacking context
@@ -2132,35 +2135,42 @@ main.story-active > #lengthFilterBar {
   border-left: 2px solid rgba(255,255,255,0.12);
 }
 
-/* ── Individual segment ──────────────────────────────────────*/
+/* ── Segment cells — each cell groups anchor + adjacent filler ─
+   Cells always carry anchor styling (anchor text dominates).
+   Filler text appears inline, smaller and muted.                */
 .sr-seg {
   position: relative;
   border-radius: 8px;
-  padding: 12px 44px 12px 14px;  /* right padding for audio btn */
-}
-
-/* Filler: subtle border, red font */
-.sr-seg-filler {
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-}
-.sr-seg-filler .sr-seg-text {
-  color: #d96c6c;   /* red — readable on all dark themes */
-}
-[data-theme="light"] .sr-seg-filler .sr-seg-text {
-  color: #cc3333;   /* darker red for light theme */
-}
-
-/* Anchor: highlighted background, normal text */
-.sr-seg-anchor {
+  padding: 12px 44px 12px 14px;
   background: var(--highlight);
   border: 1px solid var(--accent);
 }
-.sr-seg-anchor .sr-seg-text {
+
+/* Inline anchor text — primary, full size */
+.sr-inline-anchor {
+  font-family: 'Noto Sans JP', 'Noto Serif JP', sans-serif;
+  font-size: var(--jp-size, 1.4rem);
+  font-weight: var(--jp-weight, 400);
+  line-height: 1.8;
   color: var(--text);
+  word-break: break-all;
+  display: block;
 }
 
-/* Segment text */
+/* Inline filler text — secondary, smaller, muted, after anchor */
+.sr-inline-filler {
+  font-family: 'Noto Sans JP', 'Noto Serif JP', sans-serif;
+  font-size: calc(var(--jp-size, 1.4rem) * 0.78);
+  font-weight: var(--jp-weight, 400);
+  line-height: 1.7;
+  color: rgba(255,255,255,0.45);
+  word-break: break-all;
+  display: block;
+  margin-top: 4px;
+}
+[data-theme="light"] .sr-inline-filler { color: rgba(0,0,0,0.38); }
+
+/* Kept for any legacy code that may reference them */
 .sr-seg-text {
   font-family: 'Noto Sans JP', 'Noto Serif JP', sans-serif;
   font-size: var(--jp-size, 1.4rem);
