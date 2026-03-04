@@ -381,9 +381,17 @@ function _srRenderCell(cell) {
 // Dimensions: full window size clamped to 1024 and rounded to 8px grid.
 // Seed: deterministic from idbKey so the same page always gets the same image.
 //
-// While loading: sr-content orange acts as placeholder (no spinner needed).
-// Once ready: overlay.style.backgroundImage + sr-has-bg class, which
-// activates the dim ::before layer so text stays readable.
+// Sets the story reader background to a Pollinations Ghibli image.
+//
+// WHY NO fetch(): fetch() requires CORS headers for blob reads.
+// Pollinations serves images without CORS headers, so fetch() fails.
+// CSS background-image and <img src> bypass CORS entirely — the browser
+// loads the image natively just like any other page asset.
+//
+// APPROACH: build the Pollinations URL, set it directly as the overlay
+// background-image, and use a hidden Image() object purely to detect
+// when loading completes (so we can add sr-has-bg at the right moment).
+// IDB caching is kept for dataURLs stored by images.js card loads.
 
 function _srSetBackground(overlay, story, pageIdx) {
   overlay.style.backgroundImage = '';
@@ -392,22 +400,23 @@ function _srSetBackground(overlay, story, pageIdx) {
   var idbKey   = story.id + '_p' + pageIdx;
   var snapshot = { story: story, pageIdx: pageIdx };
 
-  // ── Navigation guard ───────────────────────────────────────
   function stillHere() {
     return currentStory === snapshot.story && currentPageIdx === snapshot.pageIdx;
   }
 
-  // ── Apply a dataURL to the overlay background ──────────────
-  function applyDataUrl(dataUrl) {
-    if (!dataUrl || !stillHere()) return;
-    overlay.style.backgroundImage = 'url(' + dataUrl + ')';
+  // Apply either a dataURL (from IDB) or a direct HTTPS URL.
+  // Both work as background-image values.
+  function applyUrl(url) {
+    if (!url || !stillHere()) return;
+    overlay.style.backgroundImage = 'url("' + url + '")';
     overlay.classList.add('sr-has-bg');
   }
 
-  // ── Build a rich English prompt from all page segments ─────
+  // ── Build English-only prompt from page content ────────────
+  // Japanese text is excluded — Pollinations generates much better
+  // Ghibli images from English descriptions.
   function buildPrompt() {
     var parts = [];
-    // Always start with the story English title
     if (story.titleEn) parts.push(story.titleEn);
 
     var page = story.pages && story.pages[pageIdx];
@@ -417,37 +426,33 @@ function _srSetBackground(overlay, story, pageIdx) {
         var seg = segs[i];
         if (seg.type === 'anchor' && seg.sentenceId &&
             typeof sentences !== 'undefined') {
-          // Prefer the English translation stored in sentences[]
           for (var si = 0; si < sentences.length; si++) {
             if (String(sentences[si].id) === String(seg.sentenceId)) {
               if (sentences[si].en) parts.push(sentences[si].en);
               break;
             }
           }
-        } else if (seg.type === 'filler' && seg.text) {
-          // Filler: use Japanese text — Pollinations handles it fine
-          parts.push(seg.text);
         }
+        // Filler segments skipped — Japanese text degrades image quality
       }
     }
 
-    // Join, trim to 200 chars (safe URL length), prepend Ghibli prefix
-    var scene = parts.join(' ').trim().slice(0, 200);
-    return 'Studio Ghibli anime style illustration: ' + (scene || (story.titleEn || story.title || 'Japanese scene'));
+    var scene = parts.join('. ').trim().slice(0, 200);
+    return 'Studio Ghibli style: ' +
+      (scene || (story.titleEn || story.title || 'peaceful Japanese scene'));
   }
 
-  // ── Build full-screen Pollinations URL ─────────────────────
-  function buildUrl(prompt) {
-    // Clamp to 1024, round to nearest 8 (Pollinations prefers multiples of 8)
+  // ── Build Pollinations URL (full window dimensions) ────────
+  function buildPollinationsUrl(prompt) {
     function dim(px) { return Math.round(Math.min(px, 1024) / 8) * 8; }
     var w    = dim(window.innerWidth);
     var h    = dim(window.innerHeight);
     var seed = (typeof _seedFromId === 'function')
       ? _seedFromId(idbKey)
-      : (Math.abs(idbKey.split('').reduce(function(h, c) {
-            return ((h << 5) - h) + c.charCodeAt(0) | 0;
+      : (Math.abs(idbKey.split('').reduce(function(acc, c) {
+            return ((acc << 5) - acc) + c.charCodeAt(0) | 0;
           }, 0)) % 100000);
-    var key  = (typeof POLLINATIONS_KEY !== 'undefined') ? POLLINATIONS_KEY : '';
+    var key = (typeof POLLINATIONS_KEY !== 'undefined') ? POLLINATIONS_KEY : '';
     return 'https://image.pollinations.ai/prompt/' +
       encodeURIComponent(prompt) +
       '?model=flux&width=' + w + '&height=' + h +
@@ -455,71 +460,42 @@ function _srSetBackground(overlay, story, pageIdx) {
       (key ? '&token=' + key : '');
   }
 
-  // ── Fetch URL → blob → dataURL → cache → display ──────────
-  function fetchAndCache(url, isRetry) {
+  // ── Load via Image() object — no fetch(), no CORS issues ───
+  // Sets background-image immediately so the browser starts loading,
+  // then adds sr-has-bg on load so the dim overlay only appears once
+  // the image is actually visible (not while a broken-image shows).
+  function loadViaImageTag(url) {
     if (!stillHere()) return;
-    var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    var timer = setTimeout(function() {
-      if (controller) controller.abort();
-    }, 45000);
-
-    fetch(url, controller ? { signal: controller.signal } : {})
-      .then(function(r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.blob();
-      })
-      .then(function(blob) {
-        return new Promise(function(resolve, reject) {
-          var reader = new FileReader();
-          reader.onloadend = function() { resolve(reader.result); };
-          reader.onerror   = reject;
-          reader.readAsDataURL(blob);
-        });
-      })
-      .then(function(dataUrl) {
-        clearTimeout(timer);
-        // Cache even if user navigated away (pre-warms for when they return)
-        if (typeof _imgCache !== 'undefined')  _imgCache[idbKey]  = dataUrl;
-        if (typeof _idbSet   === 'function')   _idbSet(idbKey, dataUrl);
-        applyDataUrl(dataUrl);
-      })
-      .catch(function(err) {
-        clearTimeout(timer);
-        if (err && err.name === 'AbortError') return;
-        // Retry once after 3 s
-        if (!isRetry && stillHere()) {
-          setTimeout(function() { fetchAndCache(url, true); }, 3000);
-        }
-      });
+    var img = new Image();
+    img.onload = function() {
+      if (stillHere()) overlay.classList.add('sr-has-bg');
+    };
+    img.onerror = function() {
+      // Image failed — leave background clear (theme dark color shows)
+    };
+    // Set background immediately; browser starts fetching in parallel.
+    // sr-has-bg is withheld until onload to avoid a flash of the dim
+    // overlay over a blank/broken background.
+    overlay.style.backgroundImage = 'url("' + url + '")';
+    img.src = url;  // triggers the actual load
   }
 
-  // ── Main flow: memory → IDB → network ─────────────────────
-  // 1. In-memory hit
-  if (typeof _imgCache !== 'undefined' && _imgCache[idbKey]) {
-    applyDataUrl(_imgCache[idbKey]);
-    return;
-  }
-
-  // 2. IDB hit
+  // ── Main flow ──────────────────────────────────────────────
+  // Check IDB first for a cached dataURL (stored by images.js).
+  // On miss, go straight to direct URL load — no fetch() needed.
   if (typeof _idbGet === 'function') {
     _idbGet(idbKey).then(function(record) {
       if (!stillHere()) return;
       if (record) {
         var dataUrl = typeof record === 'string' ? record : (record && record.dataUrl);
-        if (dataUrl) {
-          if (typeof _imgCache !== 'undefined') _imgCache[idbKey] = dataUrl;
-          applyDataUrl(dataUrl);
-          return;
-        }
+        if (dataUrl) { applyUrl(dataUrl); return; }
       }
-      // 3. Network fetch
-      fetchAndCache(buildUrl(buildPrompt()), false);
+      loadViaImageTag(buildPollinationsUrl(buildPrompt()));
     }).catch(function() {
-      if (stillHere()) fetchAndCache(buildUrl(buildPrompt()), false);
+      if (stillHere()) loadViaImageTag(buildPollinationsUrl(buildPrompt()));
     });
   } else {
-    // No IDB — go straight to network
-    fetchAndCache(buildUrl(buildPrompt()), false);
+    loadViaImageTag(buildPollinationsUrl(buildPrompt()));
   }
 }
 
