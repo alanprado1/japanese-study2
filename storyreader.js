@@ -370,50 +370,156 @@ function _srRenderCell(cell) {
 }
 
 // ─── Background image ─────────────────────────────────────────
-// Step 1: try IDB (pre-generated data URL).
-// Step 2: fall back to direct Pollinations URL (same deterministic seed).
-// Both paths always show an image — deck imageGen setting irrelevant here.
+// Fetches a full-screen Studio Ghibli Pollinations image for each page.
+// Cache hierarchy (fastest → slowest):
+//   1. _imgCache[idbKey]  — in-memory, instant
+//   2. _idbGet(idbKey)    — IndexedDB, <5ms, survives refresh
+//   3. Pollinations fetch — network, cached after first load
+//
+// Prompt: story title + English translations of anchor sentences on this
+// page + Japanese filler text, trimmed to 200 chars.
+// Dimensions: full window size clamped to 1024 and rounded to 8px grid.
+// Seed: deterministic from idbKey so the same page always gets the same image.
+//
+// While loading: sr-content orange acts as placeholder (no spinner needed).
+// Once ready: overlay.style.backgroundImage + sr-has-bg class, which
+// activates the dim ::before layer so text stays readable.
+
 function _srSetBackground(overlay, story, pageIdx) {
   overlay.style.backgroundImage = '';
   overlay.classList.remove('sr-has-bg');
 
   var idbKey   = story.id + '_p' + pageIdx;
-  var snapshot = { story: story, pageIdx: pageIdx }; // closure guard values
+  var snapshot = { story: story, pageIdx: pageIdx };
 
-  function applyUrl(url) {
-    if (!url) return;
-    // Guard: user may have navigated away before async resolved
-    if (currentStory !== snapshot.story || currentPageIdx !== snapshot.pageIdx) return;
-    overlay.style.backgroundImage = 'url(' + url + ')';
+  // ── Navigation guard ───────────────────────────────────────
+  function stillHere() {
+    return currentStory === snapshot.story && currentPageIdx === snapshot.pageIdx;
+  }
+
+  // ── Apply a dataURL to the overlay background ──────────────
+  function applyDataUrl(dataUrl) {
+    if (!dataUrl || !stillHere()) return;
+    overlay.style.backgroundImage = 'url(' + dataUrl + ')';
     overlay.classList.add('sr-has-bg');
   }
 
-  // Fallback: build deterministic Pollinations URL from page data
-  function tryPollinations() {
-    if (typeof _buildPrimaryUrl !== 'function') return;
-    var descText = story.titleEn || story.title || '';
-    var page     = story.pages && story.pages[pageIdx];
+  // ── Build a rich English prompt from all page segments ─────
+  function buildPrompt() {
+    var parts = [];
+    // Always start with the story English title
+    if (story.titleEn) parts.push(story.titleEn);
+
+    var page = story.pages && story.pages[pageIdx];
     if (page && page.segments) {
-      for (var i = 0; i < page.segments.length; i++) {
-        if (page.segments[i].type === 'filler') {
-          descText = page.segments[i].text.slice(0, 90);
-          break;
+      var segs = page.segments;
+      for (var i = 0; i < segs.length; i++) {
+        var seg = segs[i];
+        if (seg.type === 'anchor' && seg.sentenceId &&
+            typeof sentences !== 'undefined') {
+          // Prefer the English translation stored in sentences[]
+          for (var si = 0; si < sentences.length; si++) {
+            if (String(sentences[si].id) === String(seg.sentenceId)) {
+              if (sentences[si].en) parts.push(sentences[si].en);
+              break;
+            }
+          }
+        } else if (seg.type === 'filler' && seg.text) {
+          // Filler: use Japanese text — Pollinations handles it fine
+          parts.push(seg.text);
         }
       }
     }
-    applyUrl(_buildPrimaryUrl({ id: idbKey, en: descText, jp: descText }));
+
+    // Join, trim to 200 chars (safe URL length), prepend Ghibli prefix
+    var scene = parts.join(' ').trim().slice(0, 200);
+    return 'Studio Ghibli anime style illustration: ' + (scene || (story.titleEn || story.title || 'Japanese scene'));
   }
 
+  // ── Build full-screen Pollinations URL ─────────────────────
+  function buildUrl(prompt) {
+    // Clamp to 1024, round to nearest 8 (Pollinations prefers multiples of 8)
+    function dim(px) { return Math.round(Math.min(px, 1024) / 8) * 8; }
+    var w    = dim(window.innerWidth);
+    var h    = dim(window.innerHeight);
+    var seed = (typeof _seedFromId === 'function')
+      ? _seedFromId(idbKey)
+      : (Math.abs(idbKey.split('').reduce(function(h, c) {
+            return ((h << 5) - h) + c.charCodeAt(0) | 0;
+          }, 0)) % 100000);
+    var key  = (typeof POLLINATIONS_KEY !== 'undefined') ? POLLINATIONS_KEY : '';
+    return 'https://image.pollinations.ai/prompt/' +
+      encodeURIComponent(prompt) +
+      '?model=flux&width=' + w + '&height=' + h +
+      '&seed=' + seed + '&nologo=true&enhance=true' +
+      (key ? '&token=' + key : '');
+  }
+
+  // ── Fetch URL → blob → dataURL → cache → display ──────────
+  function fetchAndCache(url, isRetry) {
+    if (!stillHere()) return;
+    var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = setTimeout(function() {
+      if (controller) controller.abort();
+    }, 45000);
+
+    fetch(url, controller ? { signal: controller.signal } : {})
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.blob();
+      })
+      .then(function(blob) {
+        return new Promise(function(resolve, reject) {
+          var reader = new FileReader();
+          reader.onloadend = function() { resolve(reader.result); };
+          reader.onerror   = reject;
+          reader.readAsDataURL(blob);
+        });
+      })
+      .then(function(dataUrl) {
+        clearTimeout(timer);
+        // Cache even if user navigated away (pre-warms for when they return)
+        if (typeof _imgCache !== 'undefined')  _imgCache[idbKey]  = dataUrl;
+        if (typeof _idbSet   === 'function')   _idbSet(idbKey, dataUrl);
+        applyDataUrl(dataUrl);
+      })
+      .catch(function(err) {
+        clearTimeout(timer);
+        if (err && err.name === 'AbortError') return;
+        // Retry once after 3 s
+        if (!isRetry && stillHere()) {
+          setTimeout(function() { fetchAndCache(url, true); }, 3000);
+        }
+      });
+  }
+
+  // ── Main flow: memory → IDB → network ─────────────────────
+  // 1. In-memory hit
+  if (typeof _imgCache !== 'undefined' && _imgCache[idbKey]) {
+    applyDataUrl(_imgCache[idbKey]);
+    return;
+  }
+
+  // 2. IDB hit
   if (typeof _idbGet === 'function') {
     _idbGet(idbKey).then(function(record) {
+      if (!stillHere()) return;
       if (record) {
-        var url = typeof record === 'string' ? record : (record && record.dataUrl);
-        if (url) { applyUrl(url); return; }
+        var dataUrl = typeof record === 'string' ? record : (record && record.dataUrl);
+        if (dataUrl) {
+          if (typeof _imgCache !== 'undefined') _imgCache[idbKey] = dataUrl;
+          applyDataUrl(dataUrl);
+          return;
+        }
       }
-      tryPollinations();
-    }).catch(tryPollinations);
+      // 3. Network fetch
+      fetchAndCache(buildUrl(buildPrompt()), false);
+    }).catch(function() {
+      if (stillHere()) fetchAndCache(buildUrl(buildPrompt()), false);
+    });
   } else {
-    tryPollinations();
+    // No IDB — go straight to network
+    fetchAndCache(buildUrl(buildPrompt()), false);
   }
 }
 
