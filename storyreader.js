@@ -204,6 +204,13 @@ function _srRenderPage() {
       .join('\u3002');
     if (_prefetchText) prefetchJP(_prefetchText);
   }
+
+  // ── Prefetch next page's background image ─────────────────
+  // Starts fetching page N+1's illustration in the background so it's
+  // ready in _imgCache when the user navigates — no waiting at all.
+  if (!isLast) {
+    _srPrefetchBackground(story, pageIdx + 1);
+  }
 }
 
 // ─── Slice segments into short audio cells ───────────────────
@@ -372,145 +379,81 @@ function _srRenderCell(cell) {
 // ─── Background image ─────────────────────────────────────────
 // Loads a Ghibli illustration for each story page.
 //
-// StoryBuilder pre-generates images during story creation and stores them
-// in IDB under the key  story.id + '_p' + pageIdx  (same key used here).
-// On a cache hit the image appears instantly with zero network cost.
+// Cache hierarchy (fastest → slowest):
+//   1. _imgCache[key]   in-memory, instant
+//   2. _idbGet(key)     IndexedDB, survives refresh
+//   3. fetch pipeline   primary URL → retry → fallback URL
+//      Identical to _fetchImage() in images.js (proven working).
 //
-// On a cache miss (story built before image-gen, or IDB cleared) we fetch
-// live from Pollinations using the EXACT same pipeline as _fetchImage() in
-// images.js — the proven-working card image path:
-//   fetch() → blob → FileReader → dataURL → _imgCache + _idbSet → apply
-//
-// Retry logic is identical to _fetchImage():
-//   primary fail       → retry primary after 3 s
-//   primary fail ×2    → switch to fallback URL after 2 s
-//   fallback fail      → retry fallback after 5 s
-//   fallback fail ×2   → show error toast and give up
-//
-// Every step logs to console and any failure shows a visible toast so
-// the exact failure point is always identifiable.
+// Errors are logged to console only — no visible toast (the retry
+// and fallback logic handles transient failures silently).
 
-function _srSetBackground(overlay, story, pageIdx) {
-  overlay.style.backgroundImage = '';
-  overlay.classList.remove('sr-has-bg');
+// ── Shared helpers used by both _srSetBackground and _srPrefetchBackground ─
 
-  // Remove any previous error toast
-  var prevToast = overlay.querySelector('.sr-bg-toast');
-  if (prevToast) prevToast.remove();
-
-  var idbKey = story.id + '_p' + pageIdx;
-
-  // ── Navigation guard ──────────────────────────────────────
-  // Stamp the overlay with the key we're loading; check before applying.
-  // Mirrors _fetchImage's use of el.getAttribute('data-sentence-id').
-  overlay.setAttribute('data-sr-bg-key', idbKey);
-  function isCurrent() {
-    return overlay.getAttribute('data-sr-bg-key') === idbKey;
-  }
-
-  // ── Apply dataURL as background (replaces _displayDataUrl) ─
-  function applyDataUrl(dataUrl) {
-    if (!isCurrent()) return;
-    overlay.style.backgroundImage = 'url(' + dataUrl + ')';
-    overlay.classList.add('sr-has-bg');
-    console.log('[sr-bg] ✓ applied', idbKey, 'dataUrl length:', dataUrl.length);
-  }
-
-  // ── Visible error toast + console (replaces _setPlaceholderText('✕')) ─
-  function showToast(msg) {
-    console.warn('[sr-bg] ✗', idbKey, '—', msg);
-    if (!isCurrent()) return;
-    var t = overlay.querySelector('.sr-bg-toast') || document.createElement('div');
-    t.className = 'sr-bg-toast';
-    t.textContent = '⚠ bg: ' + msg;
-    t.style.cssText = 'position:absolute;bottom:68px;left:50%;transform:translateX(-50%);' +
-      'background:rgba(0,0,0,0.8);color:#faa;font:0.62rem/1.5 monospace;padding:3px 10px;' +
-      'border-radius:4px;z-index:20;pointer-events:none;' +
-      'white-space:nowrap;max-width:94vw;overflow:hidden;text-overflow:ellipsis;';
-    overlay.appendChild(t);
-  }
-
-  // ── Build English prompt from anchor sentences ─────────────
-  function buildPrompt() {
-    var parts = [];
-    if (story.titleEn) parts.push(story.titleEn);
-    var page = story.pages && story.pages[pageIdx];
-    if (page && page.segments) {
-      for (var i = 0; i < page.segments.length; i++) {
-        var seg = page.segments[i];
-        if (seg.type === 'anchor' && seg.sentenceId &&
-            typeof sentences !== 'undefined') {
-          for (var si = 0; si < sentences.length; si++) {
-            if (String(sentences[si].id) === String(seg.sentenceId)) {
-              if (sentences[si].en) parts.push(sentences[si].en);
-              break;
-            }
+function _srBuildPrompt(story, pageIdx) {
+  var parts = [];
+  if (story.titleEn) parts.push(story.titleEn);
+  var page = story.pages && story.pages[pageIdx];
+  if (page && page.segments) {
+    for (var i = 0; i < page.segments.length; i++) {
+      var seg = page.segments[i];
+      if (seg.type === 'anchor' && seg.sentenceId &&
+          typeof sentences !== 'undefined') {
+        for (var si = 0; si < sentences.length; si++) {
+          if (String(sentences[si].id) === String(seg.sentenceId)) {
+            if (sentences[si].en) parts.push(sentences[si].en);
+            break;
           }
         }
       }
     }
-    var scene = parts.join('. ').trim().slice(0, 200);
-    return 'Ghibli style: ' + (scene || (story.titleEn || story.title || 'peaceful Japanese scene'));
   }
+  var scene = parts.join('. ').trim().slice(0, 200);
+  return 'Ghibli style: ' + (scene || (story.titleEn || story.title || 'peaceful Japanese scene'));
+}
 
-  // ── Build URLs — same structure as _buildPrimaryUrl/_buildFallbackUrl ─
-  // Full window dimensions instead of card size; everything else identical.
-  function dim(px) { return Math.round(Math.min(px, 1024) / 8) * 8; }
+function _srBgDim(px) { return Math.round(Math.min(px, 1024) / 8) * 8; }
 
-  function primaryUrl(prompt) {
-    var seed = (typeof _seedFromId === 'function') ? _seedFromId(idbKey)
-      : Math.abs(idbKey.split('').reduce(function(h,c){return((h<<5)-h)+c.charCodeAt(0)|0;},0)) % 100000;
-    var key = (typeof POLLINATIONS_KEY !== 'undefined') ? POLLINATIONS_KEY : '';
-    return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
-      '?model=flux&width=' + dim(window.innerWidth) + '&height=' + dim(window.innerHeight) +
-      '&seed=' + seed + '&nologo=true&enhance=true&token=' + key;
-  }
+function _srBgPrimaryUrl(idbKey, prompt) {
+  var seed = (typeof _seedFromId === 'function') ? _seedFromId(idbKey)
+    : Math.abs(idbKey.split('').reduce(function(h,c){return((h<<5)-h)+c.charCodeAt(0)|0;},0)) % 100000;
+  var key = (typeof POLLINATIONS_KEY !== 'undefined') ? POLLINATIONS_KEY : '';
+  return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
+    '?model=flux&width=' + _srBgDim(window.innerWidth) +
+    '&height=' + _srBgDim(window.innerHeight) +
+    '&seed=' + seed + '&nologo=true&enhance=true&token=' + key;
+}
 
-  function fallbackUrl(prompt) {
-    var seed = (typeof _seedFromId === 'function') ? _seedFromId(idbKey)
-      : Math.abs(idbKey.split('').reduce(function(h,c){return((h<<5)-h)+c.charCodeAt(0)|0;},0)) % 100000;
-    var key = (typeof POLLINATIONS_KEY !== 'undefined') ? POLLINATIONS_KEY : '';
-    return 'https://gen.pollinations.ai/image/' + encodeURIComponent(prompt) +
-      '?model=flux&width=' + dim(window.innerWidth) + '&height=' + dim(window.innerHeight) +
-      '&seed=' + seed + '&enhance=true&key=' + key;
-  }
+function _srBgFallbackUrl(idbKey, prompt) {
+  var seed = (typeof _seedFromId === 'function') ? _seedFromId(idbKey)
+    : Math.abs(idbKey.split('').reduce(function(h,c){return((h<<5)-h)+c.charCodeAt(0)|0;},0)) % 100000;
+  var key = (typeof POLLINATIONS_KEY !== 'undefined') ? POLLINATIONS_KEY : '';
+  return 'https://gen.pollinations.ai/image/' + encodeURIComponent(prompt) +
+    '?model=flux&width=' + _srBgDim(window.innerWidth) +
+    '&height=' + _srBgDim(window.innerHeight) +
+    '&seed=' + seed + '&enhance=true&key=' + key;
+}
 
-  // ── fetch → blob → dataURL → cache → apply ────────────────
-  // Direct port of _fetchImage() from images.js.
-  // Identical structure, identical retry timings, identical caching.
-  function doFetch(url, endpoint, retryCount) {
-    if (!isCurrent()) return;
-    console.log('[sr-bg] fetch', endpoint, 'attempt', retryCount, url.slice(0, 90) + '…');
-
+// fetch → blob → dataURL → _imgCache + _idbSet → callback(dataUrl)
+// Silent version (no overlay, no toast): used by prefetch.
+// onDone(dataUrl) called on success; onDone(null) never called on failure.
+function _srBgFetch(idbKey, prompt, onDone) {
+  function tryFetch(url, endpoint, retryCount) {
     var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    var timer = setTimeout(function() {
-      if (controller) controller.abort();
-    }, 45000);
+    var timer = setTimeout(function() { if (controller) controller.abort(); }, 45000);
 
     function onError(err) {
       clearTimeout(timer);
       var msg = (err && err.message) ? err.message : String(err);
-      console.warn('[sr-bg] error', endpoint, retryCount, msg);
-      if (!isCurrent()) return;
-
+      console.warn('[sr-bg]', idbKey, endpoint, retryCount, msg);
       if (endpoint === 'primary' && retryCount < 1) {
-        showToast('primary failed, retrying… (' + msg + ')');
-        setTimeout(function() {
-          if (isCurrent()) doFetch(primaryUrl(buildPrompt()), 'primary', retryCount + 1);
-        }, 3000);
+        setTimeout(function() { tryFetch(_srBgPrimaryUrl(idbKey, prompt), 'primary', retryCount + 1); }, 3000);
       } else if (endpoint !== 'fallback') {
-        showToast('trying fallback… (' + msg + ')');
-        setTimeout(function() {
-          if (isCurrent()) doFetch(fallbackUrl(buildPrompt()), 'fallback', 0);
-        }, 2000);
+        setTimeout(function() { tryFetch(_srBgFallbackUrl(idbKey, prompt), 'fallback', 0); }, 2000);
       } else if (retryCount < 1) {
-        showToast('fallback failed, retrying… (' + msg + ')');
-        setTimeout(function() {
-          if (isCurrent()) doFetch(fallbackUrl(buildPrompt()), 'fallback', 1);
-        }, 5000);
-      } else {
-        showToast('all attempts failed — ' + msg);
+        setTimeout(function() { tryFetch(_srBgFallbackUrl(idbKey, prompt), 'fallback', 1); }, 5000);
       }
+      // else: give up silently
     }
 
     fetch(url, controller ? { signal: controller.signal } : {})
@@ -528,33 +471,46 @@ function _srSetBackground(overlay, story, pageIdx) {
       })
       .then(function(dataUrl) {
         clearTimeout(timer);
-        // Cache even if navigated away — pre-warms for return visits
         if (typeof _imgCache !== 'undefined') _imgCache[idbKey] = dataUrl;
         if (typeof _idbSet   === 'function')  _idbSet(idbKey, dataUrl);
-        applyDataUrl(dataUrl);
+        onDone(dataUrl);
       })
       .catch(function(err) {
         if (err && err.name === 'AbortError') return;
         onError(err);
       });
   }
+  tryFetch(_srBgPrimaryUrl(idbKey, prompt), 'primary', 0);
+}
 
-  // ── Main flow: memory → IDB → network ─────────────────────
-  // Identical to updateCardImage() in images.js.
-  console.log('[sr-bg] start', idbKey);
+// ── Set overlay background for the current page ────────────────
+function _srSetBackground(overlay, story, pageIdx) {
+  overlay.style.backgroundImage = '';
+  overlay.classList.remove('sr-has-bg');
 
-  // 1. In-memory hit — instant
+  var idbKey = story.id + '_p' + pageIdx;
+
+  // Navigation guard — stamp overlay with key, check before applying
+  overlay.setAttribute('data-sr-bg-key', idbKey);
+  function isCurrent() { return overlay.getAttribute('data-sr-bg-key') === idbKey; }
+
+  function applyDataUrl(dataUrl) {
+    if (!isCurrent()) return;
+    overlay.style.backgroundImage = 'url(' + dataUrl + ')';
+    overlay.classList.add('sr-has-bg');
+    console.log('[sr-bg] ✓', idbKey);
+  }
+
+  // 1. In-memory hit
   if (typeof _imgCache !== 'undefined' && _imgCache[idbKey]) {
-    console.log('[sr-bg] memory hit');
     applyDataUrl(_imgCache[idbKey]);
     return;
   }
 
-  // 2. IDB hit — fast (<5 ms)
+  // 2. IDB hit
   if (typeof _idbGet === 'function') {
     _idbGet(idbKey).then(function(record) {
       if (!isCurrent()) return;
-      console.log('[sr-bg] IDB result for', idbKey, ':', record ? 'found' : 'null');
       if (record) {
         var dataUrl = typeof record === 'string' ? record : (record && record.dataUrl);
         if (dataUrl) {
@@ -562,19 +518,58 @@ function _srSetBackground(overlay, story, pageIdx) {
           applyDataUrl(dataUrl);
           return;
         }
-        console.warn('[sr-bg] IDB record had no dataUrl:', JSON.stringify(record).slice(0, 80));
       }
-      // 3. Network fetch
-      doFetch(primaryUrl(buildPrompt()), 'primary', 0);
-    }).catch(function(e) {
-      console.warn('[sr-bg] IDB error:', e && e.message);
-      showToast('IDB error: ' + (e && e.message));
-      if (isCurrent()) doFetch(primaryUrl(buildPrompt()), 'primary', 0);
+      // 3. Network fetch — uses shared _srBgFetch
+      _srBgFetch(idbKey, _srBuildPrompt(story, pageIdx), function(dataUrl) {
+        applyDataUrl(dataUrl);
+      });
+    }).catch(function() {
+      if (isCurrent()) {
+        _srBgFetch(idbKey, _srBuildPrompt(story, pageIdx), function(dataUrl) {
+          applyDataUrl(dataUrl);
+        });
+      }
     });
   } else {
-    console.warn('[sr-bg] _idbGet not available');
-    showToast('_idbGet not available — fetching live');
-    doFetch(primaryUrl(buildPrompt()), 'primary', 0);
+    _srBgFetch(idbKey, _srBuildPrompt(story, pageIdx), function(dataUrl) {
+      applyDataUrl(dataUrl);
+    });
+  }
+}
+
+// ── Prefetch the next page's background image silently ─────────
+// Called after rendering page N so page N+1's image is in _imgCache
+// by the time the user navigates. Mirrors prefetchCardImage() in images.js.
+// In-flight guard uses _imgCache to avoid duplicate requests.
+function _srPrefetchBackground(story, pageIdx) {
+  var idbKey = story.id + '_p' + pageIdx;
+
+  // Skip if already cached in memory
+  if (typeof _imgCache !== 'undefined' && _imgCache[idbKey]) {
+    console.log('[sr-bg] prefetch: already in memory', idbKey);
+    return;
+  }
+
+  // Check IDB first; on miss, fetch silently
+  if (typeof _idbGet === 'function') {
+    _idbGet(idbKey).then(function(record) {
+      if (record) {
+        var dataUrl = typeof record === 'string' ? record : (record && record.dataUrl);
+        if (dataUrl) {
+          if (typeof _imgCache !== 'undefined') _imgCache[idbKey] = dataUrl;
+          console.log('[sr-bg] prefetch: IDB hit', idbKey);
+          return;
+        }
+      }
+      console.log('[sr-bg] prefetch: fetching', idbKey);
+      _srBgFetch(idbKey, _srBuildPrompt(story, pageIdx), function() {
+        console.log('[sr-bg] prefetch: cached', idbKey);
+      });
+    }).catch(function() {
+      _srBgFetch(idbKey, _srBuildPrompt(story, pageIdx), function() {});
+    });
+  } else {
+    _srBgFetch(idbKey, _srBuildPrompt(story, pageIdx), function() {});
   }
 }
 
