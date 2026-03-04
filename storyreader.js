@@ -108,13 +108,14 @@ function _srRenderPage() {
       '<button class="sr-nav-btn" onclick="_srGoTo(' + (pageIdx + 1) + ')"' + nextDis + '>Next →</button>' +
     '</div>';
 
-  // ── Story segments — grouped into mixed anchor+filler cells ──
-  // _srGroupSegments() clusters segments so each cell has one anchor
-  // with its surrounding filler, keeping anchor text dominant.
-  var groups = _srGroupSegments(segments);
+  // ── Story cells — sliced into ~15-char audio chunks ──────────
+  // _srSliceCells() annotates each char as anchor|filler, then slices
+  // at Japanese punctuation boundaries into cells of ~15 chars each.
+  // Order is preserved exactly from Gemini's narrative sequence.
+  var cells = _srSliceCells(segments);
   var bodyHTML = '<div class="sr-story-body">';
-  for (var i = 0; i < groups.length; i++) {
-    bodyHTML += _srRenderGroup(groups[i]);
+  for (var i = 0; i < cells.length; i++) {
+    bodyHTML += _srRenderCell(cells[i]);
   }
   bodyHTML += '</div>';
 
@@ -139,32 +140,28 @@ function _srRenderPage() {
         'onclick="_srToggleTranslation()" title="Toggle translation">訳</button>' +
     '</div>';
 
-  // ── Translation column — one item per GROUP (not per segment) ──
+  // ── Translation column — one item per CELL ───────────────────
+  // Anchor cells: look up English from sentences[] (instant).
+  // Filler/mixed cells: show the cell text for async MyMemory translation.
   var translHTML = '<div class="sr-transl-col">';
-  for (var ti = 0; ti < groups.length; ti++) {
-    var grp = groups[ti];
-    // Find the anchor segment in this group (if any) for instant English lookup
-    var grpEnText = '';
-    var grpFillerJP = '';
-    for (var gi = 0; gi < grp.length; gi++) {
-      if (grp[gi].type === 'anchor' && grp[gi].sentenceId && typeof sentences !== 'undefined') {
-        for (var si = 0; si < sentences.length; si++) {
-          if (String(sentences[si].id) === String(grp[gi].sentenceId)) {
-            grpEnText = sentences[si].en || '';
-            break;
-          }
+  for (var ti = 0; ti < cells.length; ti++) {
+    var cell = cells[ti];
+    var cellEnText = '';
+    // Try to find English for the first anchor sentence in this cell
+    if (cell.anchorIds.length > 0 && typeof sentences !== 'undefined') {
+      for (var si = 0; si < sentences.length; si++) {
+        if (String(sentences[si].id) === String(cell.anchorIds[0])) {
+          cellEnText = sentences[si].en || '';
+          break;
         }
-      } else if (grp[gi].type !== 'anchor' && !grpFillerJP) {
-        grpFillerJP = grp[gi].text;
       }
     }
-    // Show anchor English if available; filler items get async translation
-    var hasAnchorEn = grpEnText.length > 0;
-    var safeJP = !hasAnchorEn && grpFillerJP ? grpFillerJP.replace(/"/g, '&quot;') : '';
+    var hasEn  = cellEnText.length > 0;
+    var safeJP = !hasEn ? cell.text.replace(/"/g, '&quot;') : '';
     translHTML +=
-      '<div class="sr-transl-item' + (!hasAnchorEn && safeJP ? ' sr-transl-filler' : '') + '"' +
+      '<div class="sr-transl-item' + (!hasEn ? ' sr-transl-filler' : '') + '"' +
         (safeJP ? ' data-sr-jp="' + safeJP + '"' : '') + '>' +
-        (hasAnchorEn ? _srEsc(grpEnText) : (safeJP ? '…' : '')) +
+        (hasEn ? _srEsc(cellEnText) : '…') +
       '</div>';
   }
   translHTML += '</div>';
@@ -209,74 +206,125 @@ function _srRenderPage() {
   }
 }
 
-// ─── Group segments into anchor-dominant cells ────────────────
-// Each group = one visual cell with one audio button.
-// Rule: each anchor starts a new group; filler after an anchor
-// joins that group; filler before any anchor is buffered and prepended
-// to the first anchor group. One anchor per group maximum.
-function _srGroupSegments(segs) {
-  var groups   = [];
-  var pending  = [];   // filler segments waiting for the next anchor
+// ─── Slice segments into short audio cells ───────────────────
+//
+// APPROACH: flatten all segments into an annotated char stream
+// (each char tagged anchor|filler), then slice into ~15-char cells
+// at natural Japanese break points (。！？ first, 、 as fallback).
+//
+// This produces 7-9 cells per page with ~15 chars each — short enough
+// for comfortable per-cell audio playback. The slice order faithfully
+// follows Gemini's narrative sequence, so anchor and filler text
+// appears interleaved exactly as generated (never rearranged).
+//
+// Each cell is styled based on its dominant content type:
+//   sr-seg-anchor  → cell is entirely / mostly anchor text
+//   sr-seg-filler  → cell is entirely / mostly filler text
+//   sr-seg-mixed   → cell spans an anchor↔filler boundary
+//
+// Returns an array of cell objects:
+//   { text, dominant, anchorChars, fillerChars, anchorSegIds }
+//
+var _SR_TARGET_CHARS  = 15;   // ideal cell length (clause-break threshold)
+var _SR_MAX_CHARS     = 25;   // hard ceiling before forced break
+var _SR_MIN_SENTENCE  = 10;   // minimum chars before a sentence-end triggers a break
+var _SR_SENTENCE_END  = { '。':1, '！':1, '？':1, '…':1 };
+var _SR_CLAUSE_BREAK  = { '、':1, '，':1 };
 
-  for (var i = 0; i < segs.length; i++) {
-    var s = segs[i];
-    if (s.type === 'anchor') {
-      // Start a new group: pending filler + this anchor
-      var grp = pending.concat([s]);
-      pending = [];
-      // Absorb immediately following filler segments into this group
-      while (i + 1 < segs.length && segs[i + 1].type !== 'anchor') {
-        i++;
-        grp.push(segs[i]);
+function _srSliceCells(segs) {
+  // Build annotated char stream: [{ch, type, segIdx}]
+  var stream = [];
+  for (var si = 0; si < segs.length; si++) {
+    var text = segs[si].text;
+    for (var ci = 0; ci < text.length; ci++) {
+      stream.push({ ch: text[ci], type: segs[si].type, segIdx: si });
+    }
+  }
+
+  var cells = [];
+  var pos   = 0;
+  var n     = stream.length;
+
+  while (pos < n) {
+    var start      = pos;
+    var bestBreak  = -1;   // last good break index (exclusive end)
+    var hardEnd    = Math.min(pos + _SR_MAX_CHARS, n);
+
+    for (var j = pos; j < hardEnd; j++) {
+      var ch    = stream[j].ch;
+      var count = j - start + 1;
+
+      if (_SR_SENTENCE_END[ch]) {
+        bestBreak = j + 1;
+        if (count >= _SR_MIN_SENTENCE) break;  // natural sentence end → stop
+        // Very short sentence (< 10 chars) → record but keep going
+      } else if (_SR_CLAUSE_BREAK[ch] && count >= _SR_TARGET_CHARS) {
+        bestBreak = j + 1;
+        break;
       }
-      groups.push(grp);
-    } else {
-      // Filler before an anchor → buffer it
-      pending.push(s);
     }
-  }
-  // Any leftover filler (page has only fillers — edge case)
-  if (pending.length > 0) {
-    if (groups.length > 0) {
-      // Append to last group
-      groups[groups.length - 1] = groups[groups.length - 1].concat(pending);
-    } else {
-      groups.push(pending);
+
+    var end = (bestBreak > start) ? bestBreak : hardEnd;
+
+    // Extract cell chars
+    var cellChars = stream.slice(start, end);
+    var cellText  = cellChars.map(function(t){ return t.ch; }).join('');
+
+    // Count anchor vs filler chars
+    var aCnt = 0, fCnt = 0;
+    for (var k = 0; k < cellChars.length; k++) {
+      if (cellChars[k].type === 'anchor') aCnt++; else fCnt++;
     }
+
+    // Collect anchor sentenceIds in this cell for translation lookup
+    var anchorIds = [];
+    var seenIds   = {};
+    for (var k = 0; k < cellChars.length; k++) {
+      var sIdx = cellChars[k].segIdx;
+      if (cellChars[k].type === 'anchor' && segs[sIdx].sentenceId && !seenIds[sIdx]) {
+        seenIds[sIdx] = true;
+        anchorIds.push(segs[sIdx].sentenceId);
+      }
+    }
+
+    var dominant = aCnt > fCnt ? 'anchor' : (fCnt > aCnt ? 'filler' : 'mixed');
+
+    cells.push({
+      text:        cellText,
+      dominant:    dominant,
+      anchorChars: aCnt,
+      fillerChars: fCnt,
+      anchorIds:   anchorIds
+    });
+
+    pos = end;
   }
-  return groups;
+
+  return cells;
 }
 
-// ─── Render one group (cell) ──────────────────────────────────
-// Each cell has all its segments rendered inline with distinct styles.
-// One audio button plays the concatenated text of all segments.
-function _srRenderGroup(grp) {
-  var innerHTML = '';
-  var allTexts  = [];
+// ─── Render one cell ─────────────────────────────────────────
+// Uses buildJPHTML for furigana. Cell class reflects dominant type.
+function _srRenderCell(cell) {
+  var cls = 'sr-seg ' + (
+    cell.dominant === 'anchor' ? 'sr-seg-anchor' :
+    cell.dominant === 'filler' ? 'sr-seg-filler' :
+    'sr-seg-mixed'
+  );
 
-  for (var i = 0; i < grp.length; i++) {
-    var seg      = grp[i];
-    var isAnchor = seg.type === 'anchor';
-    var jpHTML   = (typeof buildJPHTML === 'function')
-      ? buildJPHTML(seg.text)
-      : _srEsc(seg.text);
+  var jpHTML = (typeof buildJPHTML === 'function')
+    ? buildJPHTML(cell.text)
+    : _srEsc(cell.text);
 
-    innerHTML += '<span class="' + (isAnchor ? 'sr-inline-anchor' : 'sr-inline-filler') + '">' +
-      jpHTML + '</span>';
-    allTexts.push(seg.text.trim());
-  }
-
-  // Audio button plays entire group text concatenated
-  var groupText = allTexts.filter(function(t){ return t; }).join('。');
-  var safeText  = groupText.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  var audioBtn  =
+  var safeText = cell.text.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  var audioBtn =
     '<button class="sr-seg-audio-btn" ' +
       'onclick="event.stopPropagation();_srPlaySegment(\'' + safeText + '\',this)" ' +
       'title="Play">&#9654;</button>';
 
   return (
-    '<div class="sr-seg">' +
-      innerHTML +
+    '<div class="' + cls + '">' +
+      '<div class="sr-seg-text">' + jpHTML + '</div>' +
       audioBtn +
     '</div>'
   );
