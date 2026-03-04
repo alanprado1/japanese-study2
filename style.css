@@ -2043,7 +2043,7 @@ main.story-active > #lengthFilterBar {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: #e8650a;
+  background: transparent;  /* overlay background-image shows through */
 }
 
 /* ── Navigation bar (top) ────────────────────────────────────*/
