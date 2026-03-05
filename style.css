@@ -34,6 +34,7 @@
 
   /* Typography vars — controlled by settings panel */
   --jp-size:   1.9rem;
+  --sr-jp-size: 1.4rem;   /* story reader font — independent of card font */
   --jp-weight: 400;
 }
 
@@ -2154,7 +2155,7 @@ main.story-active > #lengthFilterBar {
 /* Segment text container */
 .sr-seg-text {
   font-family: 'Noto Sans JP', 'Noto Serif JP', sans-serif;
-  font-size: var(--jp-size, 1.4rem);
+  font-size: var(--sr-jp-size, 1.4rem);
   line-height: 1.8;
   word-break: break-all;
   color: var(--text);

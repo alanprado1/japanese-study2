@@ -595,7 +595,7 @@ function _srMountFontControls() {
   }
 
   var curSize = parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue('--jp-size') || '1.4'
+    getComputedStyle(document.documentElement).getPropertyValue('--sr-jp-size') || '1.4'
   );
 
   var btn = document.createElement('button');
@@ -652,10 +652,10 @@ function _srToggleFontPanel() {
 
 function _srSetFontSize(val) {
   var rem = parseFloat(val).toFixed(1);
-  document.documentElement.style.setProperty('--jp-size', rem + 'rem');
+  document.documentElement.style.setProperty('--sr-jp-size', rem + 'rem');
   var label = document.getElementById('srFontVal');
   if (label) label.textContent = rem + 'rem';
-  try { localStorage.setItem('jpStudy_jpSize', rem + 'rem'); } catch(e) {}
+  try { localStorage.setItem('jpStudy_srJpSize', rem + 'rem'); } catch(e) {}
 }
 
 // ─── Furigana toggle ──────────────────────────────────────────

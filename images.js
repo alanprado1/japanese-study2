@@ -347,6 +347,10 @@ function _fetchImage(el, sentence, url, endpoint, retryCount) {
 }
 
 // ─── prefetch next card ───────────────────────────────────────
+// Silently pre-loads the next card's image into _imgCache + IDB so
+// navigating to it is instant. Uses the same fetch pipeline as
+// _fetchImage() (retry primary, then fallback URL, then retry fallback)
+// so transient HTTP 530/503 errors don't leave the cache empty.
 
 function prefetchCardImage(sentence) {
   if (!sentence || !isImageGenEnabled()) return;
@@ -355,27 +359,62 @@ function prefetchCardImage(sentence) {
 
   _idbGet(sid).then(function(record) {
     if (record && record.dataUrl) {
+      // Already in IDB — warm the in-memory cache
       _imgCache[sid] = record.dataUrl;
       return;
     }
+
+    // Not cached — fetch with full retry + fallback, same as _fetchImage()
+    if (_imgLoading[sid]) return;  // re-check after async IDB read
     _imgLoading[sid] = true;
-    fetch(_buildPrimaryUrl(sentence))
-      .then(function(r) { return r.ok ? r.blob() : Promise.reject(r.status); })
-      .then(function(blob) {
-        return new Promise(function(resolve, reject) {
-          var reader = new FileReader();
-          reader.onloadend = function() { resolve(reader.result); };
-          reader.onerror   = reject;
-          reader.readAsDataURL(blob);
-        });
-      })
-      .then(function(dataUrl) {
+
+    function tryFetch(url, endpoint, retryCount) {
+      var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var timer = setTimeout(function() { if (controller) controller.abort(); }, 45000);
+
+      function onErr() {
+        clearTimeout(timer);
         delete _imgLoading[sid];
-        _imgCache[sid] = dataUrl;
-        _idbSet(sid, dataUrl);
-      })
-      .catch(function() { delete _imgLoading[sid]; });
-  });
+        if (endpoint === 'primary' && retryCount < 1) {
+          _imgLoading[sid] = true;
+          setTimeout(function() { tryFetch(_buildPrimaryUrl(sentence), 'primary', retryCount + 1); }, 3000);
+        } else if (endpoint !== 'fallback') {
+          _imgLoading[sid] = true;
+          setTimeout(function() { tryFetch(_buildFallbackUrl(sentence), 'fallback', 0); }, 2000);
+        } else if (retryCount < 1) {
+          _imgLoading[sid] = true;
+          setTimeout(function() { tryFetch(_buildFallbackUrl(sentence), 'fallback', 1); }, 5000);
+        }
+        // else: give up silently — no visible error for prefetch
+      }
+
+      fetch(url, controller ? { signal: controller.signal } : {})
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.blob();
+        })
+        .then(function(blob) {
+          return new Promise(function(resolve, reject) {
+            var reader = new FileReader();
+            reader.onloadend = function() { resolve(reader.result); };
+            reader.onerror   = reject;
+            reader.readAsDataURL(blob);
+          });
+        })
+        .then(function(dataUrl) {
+          clearTimeout(timer);
+          delete _imgLoading[sid];
+          _imgCache[sid] = dataUrl;
+          _idbSet(sid, dataUrl);
+        })
+        .catch(function(err) {
+          if (err && err.name === 'AbortError') { delete _imgLoading[sid]; return; }
+          onErr();
+        });
+    }
+
+    tryFetch(_buildPrimaryUrl(sentence), 'primary', 0);
+  }).catch(function() { delete _imgLoading[sid]; });
 }
 
 // ─── toggle ───────────────────────────────────────────────────

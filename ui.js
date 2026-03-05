@@ -255,6 +255,12 @@ function loadUIPrefs() {
     document.getElementById('fontSizeVal').textContent = sz;
   }
 
+  // Restore story reader font size independently (uses separate CSS var --sr-jp-size)
+  var srSz = localStorage.getItem('jpStudy_srJpSize');
+  if (srSz) {
+    document.documentElement.style.setProperty('--sr-jp-size', srSz);
+  }
+
   var wt = localStorage.getItem('jpStudy_jpWeight');
   if (wt) {
     document.documentElement.style.setProperty('--jp-weight', wt);
