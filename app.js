@@ -34,7 +34,28 @@ var currentLengthFilter = null;
 // Per-filter card position memory.
 // Key: filter value ('SHORT','MEDIUM','LONG','VERY LONG') or 'all' for no filter.
 // When the user switches between filters, their position in each filter is preserved.
-var _filterIndices = {};
+var _filterIndices = (function() {
+  try {
+    var raw = localStorage.getItem('jpStudy_filterIndices');
+    return raw ? JSON.parse(raw) : {};
+  } catch(e) { return {}; }
+})();
+
+function _saveFilterIndices() {
+  try { localStorage.setItem('jpStudy_filterIndices', JSON.stringify(_filterIndices)); } catch(e) {}
+}
+
+// Restore currentIdx to the saved per-filter position after any async deck sync
+// (e.g. Firestore pull) that may have clobbered currentIdx with the deck's raw value.
+// Call this after any syncDeckToApp() that isn't a deliberate navigation.
+function _restoreFilterIdx() {
+  var key = currentLengthFilter || 'all';
+  if (_filterIndices[key] !== undefined) {
+    var filtered = getSentencesForFilter();
+    var saved    = _filterIndices[key];
+    currentIdx   = (saved < filtered.length) ? saved : Math.max(0, filtered.length - 1);
+  }
+}
 
 var LENGTH_LABELS = ['SHORT', 'MEDIUM', 'LONG', 'VERY LONG'];
 
@@ -569,6 +590,7 @@ function toggleLengthPill(key) {
     var oldKey = previousFilter || 'all';
     var newKey = currentLengthFilter || 'all';
     _filterIndices[oldKey] = currentIdx;
+    _saveFilterIndices();                    // persist so filter positions survive async resets
     currentIdx = _filterIndices[newKey] || 0;
     // Clamp in case the filter set shrank since we last visited it
     var newSet = getSentencesForFilter();

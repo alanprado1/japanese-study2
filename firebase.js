@@ -35,6 +35,10 @@ function initFirebase() {
       if (user) {
         pullFromFirestore().then(function() {
           syncDeckToApp();
+          // Restore the per-filter card position — syncDeckToApp() sets currentIdx
+          // from the deck's raw stored value, which can clobber the in-session
+          // per-filter position that _filterIndices was tracking.
+          if (typeof _restoreFilterIdx === 'function') _restoreFilterIdx();
           render();
           updateDeckUI();
         }).catch(function(e) {
