@@ -24,6 +24,49 @@ var _srSwipeStartY = 0;
 var _srSwipeDir    = null;   // 'h' | 'v' | null
 var _srSwipeWired  = false;  // prevent double-wiring
 
+// ─── Page reflow state ────────────────────────────────────────
+// Segments are split into screen-sized pages by character budget.
+// This runs synchronously at open time — no DOM measurement needed.
+var _srPages      = null;  // reflowed page array
+var _srPagesId    = null;  // story.id the reflow was built for
+
+// Split all story segments into pages that fit the visible area.
+// Budget: 300 chars for page 0 (title block takes space), 420 for rest.
+// Each reflow page carries srcPageIdx for correct background image mapping.
+function _srBuildPages(story) {
+  var all = [];
+  for (var pi = 0; pi < story.pages.length; pi++) {
+    var segs = story.pages[pi].segments || [];
+    for (var si = 0; si < segs.length; si++) {
+      all.push({ seg: segs[si], srcPageIdx: pi });
+    }
+  }
+  if (!all.length) return story.pages;
+
+  var BUDGET_P0 = 280;
+  var BUDGET    = 400;
+  var pages     = [];
+  var curSegs   = [];
+  var curSrc    = all[0].srcPageIdx;
+  var used      = 0;
+
+  for (var i = 0; i < all.length; i++) {
+    var chars  = all[i].seg.text.length;
+    var budget = pages.length === 0 ? BUDGET_P0 : BUDGET;
+    if (curSegs.length > 0 && used + chars > budget) {
+      pages.push({ segments: curSegs, srcPageIdx: curSrc });
+      curSegs = [];
+      curSrc  = all[i].srcPageIdx;
+      used    = 0;
+    }
+    if (curSegs.length === 0) curSrc = all[i].srcPageIdx;
+    curSegs.push(all[i].seg);
+    used += chars;
+  }
+  if (curSegs.length) pages.push({ segments: curSegs, srcPageIdx: curSrc });
+  return pages.length ? pages : story.pages;
+}
+
 // ─── Open the reader ──────────────────────────────────────────
 function openStoryReader(story) {
   if (!story || !story.pages || !story.pages.length) return;
@@ -32,55 +75,47 @@ function openStoryReader(story) {
   currentPageIdx = 0;
   _srStopAudio();
 
+  // Build reflowed pages once per story
+  if (_srPagesId !== story.id) {
+    _srPages   = _srBuildPages(story);
+    _srPagesId = story.id;
+  }
+
   var overlay = document.getElementById('storyReaderOverlay');
   if (!overlay) return;
   overlay.style.display = 'flex';
 
-  // ── Pre-fetch page 0 background immediately ──────────────────
-  // Start the network request BEFORE _srRenderPage() so by the time
-  // the page finishes rendering, the image is already in flight (or done).
-  // _srSetBackground will find it in _imgCache and apply it synchronously.
-  // We skip this if already in _imgCache (e.g. user re-opens same story).
+  // Kick off page-0 background fetch immediately — before _srRenderPage —
+  // so the image arrives as early as possible. _srSetBackground will find
+  // it in _imgCache and apply synchronously if it's ready; otherwise the
+  // fetch callback applies it as soon as it lands.
   var p0key = story.id + '_p0';
-  if (typeof _imgCache !== 'undefined' && !_imgCache[p0key]) {
-    // Check IDB first; if miss, start network fetch into _imgCache now
-    var _doP0Fetch = function() {
-      _srBgFetch(p0key, _srBuildPrompt(story, 0), function(dataUrl) {
-        // _srBgFetch already wrote to _imgCache; if reader is still on page 0,
-        // apply it immediately without waiting for another _srRenderPage call
-        var ov = document.getElementById('storyReaderOverlay');
-        if (ov && ov.getAttribute('data-sr-bg-key') === p0key) {
-          ov.style.backgroundImage = 'url(' + dataUrl + ')';
-          ov.classList.add('sr-has-bg');
-        }
-      });
+  if (typeof _imgCache === 'undefined' || !_imgCache[p0key]) {
+    var _applyIfCurrent = function(dataUrl) {
+      var ov = document.getElementById('storyReaderOverlay');
+      if (ov && ov.getAttribute('data-sr-bg-key') === p0key) {
+        ov.style.backgroundImage = 'url(' + dataUrl + ')';
+        ov.classList.add('sr-has-bg');
+      }
+    };
+    var _doFetch = function() {
+      _srBgFetch(p0key, _srBuildPrompt(story, 0), _applyIfCurrent);
     };
     if (typeof _idbGet === 'function') {
-      _idbGet(p0key).then(function(record) {
-        if (record) {
-          var dataUrl = typeof record === 'string' ? record : (record && record.dataUrl);
-          if (dataUrl && typeof _imgCache !== 'undefined') {
-            _imgCache[p0key] = dataUrl;
-            // Apply immediately if render already happened
-            var ov = document.getElementById('storyReaderOverlay');
-            if (ov && ov.getAttribute('data-sr-bg-key') === p0key) {
-              ov.style.backgroundImage = 'url(' + dataUrl + ')';
-              ov.classList.add('sr-has-bg');
-            }
+      _idbGet(p0key).then(function(rec) {
+        if (rec) {
+          var url = typeof rec === 'string' ? rec : (rec && rec.dataUrl);
+          if (url) {
+            if (typeof _imgCache !== 'undefined') _imgCache[p0key] = url;
+            _applyIfCurrent(url);
             return;
           }
         }
-        _doP0Fetch();
-      }).catch(_doP0Fetch);
+        _doFetch();
+      }).catch(_doFetch);
     } else {
-      _doP0Fetch();
+      _doFetch();
     }
-  }
-
-  // Build reflowed pages (char-budget split) — once per story
-  if (_srPagesStory !== story.id) {
-    _srPages      = _srBuildPages(story);
-    _srPagesStory = story.id;
   }
 
   _srRenderPage();
@@ -98,7 +133,7 @@ function closeStoryReader() {
   currentStory   = null;
   currentPageIdx = 0;
   _srPages       = null;
-  _srPagesStory  = null;
+  _srPagesId     = null;
   var overlay = document.getElementById('storyReaderOverlay');
   if (overlay) overlay.style.display = 'none';
 }
@@ -133,7 +168,7 @@ function _srRenderPage() {
   var page     = pages[pageIdx];
   var total    = pages.length;
   var segments = page ? page.segments : [];
-  // Map to original page index for background images
+  // Map reflow page → original page index for background images
   var bgIdx    = (page && page.srcPageIdx !== undefined) ? page.srcPageIdx : pageIdx;
   var isFirst  = pageIdx === 0;
   var isLast   = pageIdx === total - 1;
@@ -260,83 +295,11 @@ function _srRenderPage() {
 
   // ── Prefetch next page's background image ─────────────────
   if (!isLast) {
-    var nextPage   = pages[pageIdx + 1];
-    var nextBgIdx  = (nextPage && nextPage.srcPageIdx !== undefined)
+    var nextPage  = pages[pageIdx + 1];
+    var nextBgIdx = (nextPage && nextPage.srcPageIdx !== undefined)
       ? nextPage.srcPageIdx : pageIdx + 1;
     _srPrefetchBackground(story, nextBgIdx);
   }
-}
-
-// ─── Page reflow state ────────────────────────────────────────
-// Segments are redistributed into screen-sized pages at open time.
-// _srPages is the canonical page array used by all render/nav code.
-var _srPages       = null;   // reflowed pages array (or raw story.pages)
-var _srPagesStory  = null;   // story.id these pages were built from
-
-// ─── Reflow segments to fit the visible area ──────────────────
-//
-// We can't rely on DOM measurement before paint, so we use a proven
-// character-count budget derived from measured CSS constants:
-//   - sr-story-body height ≈ overlay height minus nav (52px) + bottom bar
-//     (56px) + title on p0 (80px) + padding (32px) = ~220px reserved
-//   - Each sr-seg cell ≈ (chars / charsPerLine) × lineHeight + padding
-//     At default font (1.15rem ≈ 18px), ~22 chars/line, 1.6 line-height → 29px/line
-//     plus 24px padding = ~53px for a 22-char cell, ~80px for a 44-char cell
-//
-// We target a conservative budget of ~500 chars per page, which fits
-// comfortably even with furigana and longer text.  Users can navigate.
-//
-// Each reflow page carries srcPageIdx → background image stays correct.
-
-function _srBuildPages(story) {
-  if (!story || !story.pages) return [];
-
-  // Gather all segments with their source page index
-  var all = [];
-  for (var pi = 0; pi < story.pages.length; pi++) {
-    var segs = story.pages[pi].segments || [];
-    for (var si = 0; si < segs.length; si++) {
-      all.push({ seg: segs[si], srcPageIdx: pi });
-    }
-  }
-  if (!all.length) return story.pages;
-
-  // Character budget per screen-page.
-  // Empirically: 400 chars ≈ 6-8 cells ≈ fits a 700px tall reader body.
-  // Page 0 has a title block so it gets a smaller budget.
-  var BUDGET      = 420;
-  var BUDGET_P0   = 300;  // reduced because of title block
-
-  var pages       = [];
-  var curSegs     = [];
-  var curSrc      = all[0].srcPageIdx;
-  var accumulated = 0;
-
-  for (var i = 0; i < all.length; i++) {
-    var item   = all[i];
-    var chars  = item.seg.text.length;
-    var budget = pages.length === 0 ? BUDGET_P0 : BUDGET;
-
-    // If adding this segment would exceed budget AND we have ≥1 segment,
-    // flush current page. Never leave a page empty.
-    if (curSegs.length > 0 && accumulated + chars > budget) {
-      pages.push({ segments: curSegs, srcPageIdx: curSrc });
-      curSegs     = [];
-      curSrc      = item.srcPageIdx;
-      accumulated = 0;
-    }
-
-    curSegs.push(item.seg);
-    // srcPageIdx = the source page of the majority/first segment
-    if (curSegs.length === 1) curSrc = item.srcPageIdx;
-    accumulated += chars;
-  }
-
-  if (curSegs.length) {
-    pages.push({ segments: curSegs, srcPageIdx: curSrc });
-  }
-
-  return pages.length ? pages : story.pages;
 }
 
 // ─── Slice segments into short audio cells ───────────────────
