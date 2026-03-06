@@ -4,58 +4,78 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>積む — Japanese Study</title>
-
-  <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100;200;300;400;500;700&family=Noto+Serif+JP:wght@300;400;600&family=DM+Mono:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-
-  <!-- App styles -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body data-theme="default">
 <div class="app">
 
-  <!-- ===== HEADER ===== -->
-  <header>
-    <div class="logo">
-      <div>
-        <div>積む</div>
-        <div class="logo-sub">Japanese Study</div>
-      </div>
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar" id="sidebar">
+
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-kanji">積む</div>
+      <div class="sidebar-logo-sub">Japanese Study</div>
     </div>
-    <div class="header-controls">
-      <button class="btn" id="btnToggleFurigana">振仮名 OFF</button>
-      <button class="btn active" id="btnToggleTranslation">Translation ON</button>
-      <button class="btn" id="btnCardView" onclick="setViewMode('card')">⊟ Cards</button>
-      <button class="btn" id="btnListView" onclick="setViewMode('list')">≡ List</button>
-      <button class="btn" id="btnReviewMode">
-        ⏱ Review
+
+    <nav class="sidebar-nav">
+      <button class="sidebar-btn" id="btnCardView" onclick="setViewMode('card')">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        <span>Cards</span>
+      </button>
+      <button class="sidebar-btn" id="btnListView" onclick="setViewMode('list')">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg>
+        <span>List</span>
+      </button>
+      <button class="sidebar-btn" id="btnReviewMode">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 15.5"/></svg>
+        <span>Review</span>
         <span class="due-badge" id="dueBadge" style="display:none">0</span>
       </button>
-      <button class="btn" id="btnStoryBuilder" onclick="toggleStoryMode()">📖 Stories</button>
-      <button class="btn" id="btnDeleteMode">✕ Del</button>
-      <button class="btn" id="btnDeckSelect">⊞ Deck</button>
-      <button class="btn btn-accent" id="btnAddSentences">+ Add</button>
-      <!-- Firebase auth -->
-      <span id="userInfo" style="display:none; font-family:'DM Mono',monospace; font-size:0.68rem; color:var(--text3); max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
-      <button class="btn" id="btnAuth" onclick="signInWithGoogle()">☁ Sync</button>
-      <!-- Settings gear -->
-      <button class="settings-btn" id="btnSettings" title="Typography settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06
-                   a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09
-                   A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83
-                   l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09
-                   A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83
-                   l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09
-                   a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83
-                   l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09
-                   a1.65 1.65 0 0 0-1.51 1z"/>
-        </svg>
+      <button class="sidebar-btn" id="btnStoryBuilder" onclick="toggleStoryMode()">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span>Stories</span>
       </button>
-      <!-- Theme dots -->
-      <div class="theme-dots">
+    </nav>
+
+    <div class="sidebar-divider"></div>
+
+    <nav class="sidebar-nav sidebar-nav-secondary">
+      <button class="sidebar-btn" id="btnToggleFurigana">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg>
+        <span>Furigana</span>
+        <span class="sidebar-toggle-state" id="furiganaState">OFF</span>
+      </button>
+      <button class="sidebar-btn active" id="btnToggleTranslation">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6"/></svg>
+        <span>Translation</span>
+        <span class="sidebar-toggle-state active" id="translationState">ON</span>
+      </button>
+      <button class="sidebar-btn" id="btnAddSentences">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        <span>Add Sentences</span>
+      </button>
+      <button class="sidebar-btn" id="btnDeckSelect">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+        <span>Decks</span>
+      </button>
+      <button class="sidebar-btn" id="btnDeleteMode">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
+        <span>Delete</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="sidebar-divider"></div>
+      <button class="sidebar-btn" id="btnSettings" title="Typography settings">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Settings</span>
+      </button>
+      <button class="sidebar-btn" id="btnAuth" onclick="signInWithGoogle()">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+        <span id="userInfo" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px;display:inline">Sync</span>
+      </button>
+      <div class="sidebar-themes">
         <div class="theme-dot active" data-t="default"  title="Violet Dark"></div>
         <div class="theme-dot"        data-t="midnight" title="Midnight Blue"></div>
         <div class="theme-dot"        data-t="matcha"   title="Matcha Green"></div>
@@ -63,121 +83,151 @@
         <div class="theme-dot"        data-t="light"    title="Light"></div>
       </div>
     </div>
-  </header>
 
-  <!-- ===== MAIN ===== -->
-  <main>
+  </aside>
 
-    <!-- Stats bar -->
-    <div class="stats-bar" id="statsBar" style="display:none">
-      <span id="statCard">0 / 0</span>
-      <div class="progress-track">
-        <div class="progress-fill" id="progressFill" style="width:0%"></div>
+  <!-- Mobile overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+  <!-- ===== MAIN WRAP ===== -->
+  <div class="main-wrap">
+
+    <!-- Slim topbar: hamburger + stats + filters -->
+    <header class="topbar" id="topbar">
+      <button class="topbar-hamburger" id="btnMobileNav" aria-label="Toggle navigation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" width="18" height="18">
+          <line x1="3" y1="6"  x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+      <div class="stats-bar" id="statsBar" style="display:none">
+        <span id="statCard">0 / 0</span>
+        <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        <span id="statDue"></span>
       </div>
-      <span id="statDue"></span>
-    </div>
-
-    <!-- Length filter bar (shown in card + review mode) -->
-    <div class="length-filter-bar" id="lengthFilterBar" style="display:none">
-      <span class="length-filter-label">Filter:</span>
-      <button class="length-filter-pill" onclick="toggleLengthPill('SHORT')">Short</button>
-      <button class="length-filter-pill" onclick="toggleLengthPill('MEDIUM')">Medium</button>
-      <button class="length-filter-pill" onclick="toggleLengthPill('LONG')">Long</button>
-      <button class="length-filter-pill" onclick="toggleLengthPill('VERY LONG')">Very Long</button>
-      <button class="length-filter-pill length-filter-all" onclick="toggleLengthPill(null)">All</button>
-    </div>
-
-    <!-- Flashcard view -->
-    <div class="flashcard-container" id="flashcardView">
-
-      <!-- Empty state -->
-      <div class="empty-state" id="emptyState">
-        <div class="kanji">無</div>
-        <p>No sentences yet. Add some Japanese sentences to begin studying.</p>
-        <button class="btn btn-accent" onclick="openAddModal()">+ Add Sentences</button>
+      <div class="length-filter-bar" id="lengthFilterBar" style="display:none">
+        <span class="length-filter-label">Filter</span>
+        <button class="length-filter-pill" onclick="toggleLengthPill('SHORT')">Short</button>
+        <button class="length-filter-pill" onclick="toggleLengthPill('MEDIUM')">Medium</button>
+        <button class="length-filter-pill" onclick="toggleLengthPill('LONG')">Long</button>
+        <button class="length-filter-pill" onclick="toggleLengthPill('VERY LONG')">Very Long</button>
+        <button class="length-filter-pill length-filter-all" onclick="toggleLengthPill(null)">All</button>
       </div>
+    </header>
 
-      <!-- Card area -->
-      <div id="cardArea" style="display:none; width:100%">
-        <div class="card-wrapper">
-          <div class="card" id="mainCard">
+    <main>
 
-            <!-- Japanese sentence — sits above the image, room for furigana -->
-            <div class="card-jp-area">
-              <div class="jp-sentence" id="jpText"></div>
-            </div>
+      <!-- Flashcard view -->
+      <div class="flashcard-container" id="flashcardView">
+        <div class="empty-state" id="emptyState">
+          <div class="kanji">無</div>
+          <p>No sentences yet. Add some Japanese sentences to begin studying.</p>
+          <button class="btn btn-accent" onclick="openAddModal()">+ Add Sentences</button>
+        </div>
 
-            <!-- Illustration placeholder (Phase 2: real AI image) -->
-            <div class="card-image" id="cardImage">
-              <div class="card-image-placeholder">
-                <svg viewBox="0 0 80 52" fill="none" xmlns="http://www.w3.org/2000/svg" width="80" height="52" opacity="0.35">
-                  <polygon points="0,52 18,24 36,52" fill="currentColor" opacity="0.3"/>
-                  <polygon points="22,52 42,18 62,52" fill="currentColor" opacity="0.5"/>
-                  <polygon points="44,52 64,28 80,52" fill="currentColor" opacity="0.3"/>
-                  <circle cx="62" cy="14" r="7" fill="currentColor" opacity="0.4"/>
-                  <circle cx="20" cy="10" r="1" fill="currentColor" opacity="0.5"/>
-                  <circle cx="34" cy="6"  r="1" fill="currentColor" opacity="0.4"/>
-                  <circle cx="50" cy="9"  r="1" fill="currentColor" opacity="0.5"/>
-                  <circle cx="12" cy="18" r="1" fill="currentColor" opacity="0.3"/>
-                </svg>
-                <span>絵</span>
+        <div id="cardArea" style="display:none; width:100%">
+          <div class="card-wrapper">
+            <div class="card" id="mainCard">
+              <div class="card-jp-area">
+                <div class="jp-sentence" id="jpText"></div>
+              </div>
+              <div class="card-image" id="cardImage">
+                <div class="card-image-placeholder">
+                  <svg viewBox="0 0 80 52" fill="none" xmlns="http://www.w3.org/2000/svg" width="80" height="52" opacity="0.35">
+                    <polygon points="0,52 18,24 36,52" fill="currentColor" opacity="0.3"/>
+                    <polygon points="22,52 42,18 62,52" fill="currentColor" opacity="0.5"/>
+                    <polygon points="44,52 64,28 80,52" fill="currentColor" opacity="0.3"/>
+                    <circle cx="62" cy="14" r="7" fill="currentColor" opacity="0.4"/>
+                    <circle cx="20" cy="10" r="1" fill="currentColor" opacity="0.5"/>
+                    <circle cx="34" cy="6"  r="1" fill="currentColor" opacity="0.4"/>
+                    <circle cx="50" cy="9"  r="1" fill="currentColor" opacity="0.5"/>
+                    <circle cx="12" cy="18" r="1" fill="currentColor" opacity="0.3"/>
+                  </svg>
+                  <span>絵</span>
+                </div>
+              </div>
+              <div class="card-en-area">
+                <div class="translation" id="transText"></div>
               </div>
             </div>
+          </div>
 
-            <!-- English translation — sits below the image -->
-            <div class="card-en-area">
-              <div class="translation" id="transText"></div>
-            </div>
+          <div class="review-btns" id="reviewBtns" style="display:none; margin-top:20px;">
+            <button class="review-btn again" onclick="reviewCard('again')">Again</button>
+            <button class="review-btn hard"  onclick="reviewCard('hard')">Hard</button>
+            <button class="card-audio-btn review-audio-btn" id="reviewAudioBtn" onclick="speakCard()"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align:middle"><path d="M8 5v14l11-7z"/></svg></button>
+            <button class="review-btn good"  onclick="reviewCard('good')">Good</button>
+            <button class="review-btn easy"  onclick="reviewCard('easy')">Easy</button>
+          </div>
 
+          <div class="card-nav" id="cardNav">
+            <button class="btn btn-nav" onclick="prevCard()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16"><polyline points="15 18 9 12 15 6"/></svg>
+              Prev
+            </button>
+            <button class="card-audio-btn" id="cardAudioBtn" onclick="speakCard()"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" style="vertical-align:middle"><path d="M8 5v14l11-7z"/></svg></button>
+            <button class="btn btn-nav" onclick="nextCard()">
+              Next
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
           </div>
         </div>
+      </div>
 
-        <!-- SRS review buttons (shown in review mode) -->
-        <div class="review-btns" id="reviewBtns" style="display:none; margin-top:16px;">
-          <button class="review-btn again" onclick="reviewCard('again')">Again</button>
-          <button class="review-btn hard"  onclick="reviewCard('hard')">Hard</button>
-          <button class="card-audio-btn review-audio-btn" id="reviewAudioBtn" onclick="speakCard()"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align:middle"><path d="M8 5v14l11-7z"/></svg></button>
-          <button class="review-btn good"  onclick="reviewCard('good')">Good</button>
-          <button class="review-btn easy"  onclick="reviewCard('easy')">Easy</button>
-        </div>
+      <!-- List view -->
+      <div class="list-view" id="listView"></div>
 
-        <!-- Prev / Play / Next navigation -->
-        <div class="card-nav" id="cardNav">
-          <button class="btn" onclick="prevCard()">← Prev</button>
-          <button class="card-audio-btn" id="cardAudioBtn" onclick="speakCard()"><svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align:middle"><path d="M8 5v14l11-7z"/></svg></button>
-          <button class="btn" onclick="nextCard()">Next →</button>
+      <!-- Story screen -->
+      <div id="storyScreen" style="display:none">
+        <div class="sb-screen-header">
+          <button class="btn" onclick="exitStoryMode()">← Back</button>
+          <div>
+            <div class="sb-screen-title-main">📖 StoryBuilder</div>
+            <div class="sb-screen-title-sub">Generate immersive stories from your study sentences</div>
+          </div>
         </div>
+        <div class="sb-info-bar" id="sbInfoBar">—</div>
+        <div id="sbGroupsContainer"></div>
+      </div>
+
+    </main>
+  </div><!-- /.main-wrap -->
+
+  <!-- ===== MODALS & OVERLAYS ===== -->
+
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-title">Typography</div>
+    <div class="settings-row">
+      <div class="settings-label">Card Font Size <span id="fontSizeVal">1.9rem</span></div>
+      <input type="range" id="fontSizeSlider" min="1" max="3.5" step="0.1" value="1.9">
+    </div>
+    <div class="settings-row">
+      <div class="settings-label">Font Weight</div>
+      <div class="weight-btns">
+        <button class="weight-btn" data-w="100" onclick="setWeight(this)">Thin</button>
+        <button class="weight-btn" data-w="200" onclick="setWeight(this)">ExLight</button>
+        <button class="weight-btn" data-w="300" onclick="setWeight(this)">Light</button>
+        <button class="weight-btn active" data-w="400" onclick="setWeight(this)">Regular</button>
+        <button class="weight-btn" data-w="500" onclick="setWeight(this)">Medium</button>
+        <button class="weight-btn" data-w="700" onclick="setWeight(this)">Bold</button>
       </div>
     </div>
-
-    <!-- List view -->
-    <div class="list-view" id="listView"></div>
-
-    <!-- ===== STORY SCREEN ===== -->
-    <!-- Shown when isStoryMode === true, hidden otherwise.           -->
-    <!-- enterStoryMode() / exitStoryMode() manage display toggling.  -->
-    <div id="storyScreen" style="display:none">
-
-      <!-- Sub-header: back button + title -->
-      <div class="sb-screen-header">
-        <button class="btn" onclick="exitStoryMode()">← Back</button>
-        <div>
-          <div class="sb-screen-title-main">📖 StoryBuilder</div>
-          <div class="sb-screen-title-sub">Generate immersive stories from your study sentences</div>
-        </div>
+    <div class="settings-row" style="margin-bottom:0">
+      <div class="settings-label">Preview</div>
+      <div style="font-family:'Kikai Chokoku JIS','Noto Sans JP',serif;font-size:var(--jp-size);font-weight:var(--jp-weight);color:var(--text);padding:8px 0;line-height:1.6">日本語</div>
+    </div>
+    <div class="settings-divider"></div>
+    <div class="settings-row" style="margin-bottom:0">
+      <div class="settings-label">Voice</div>
+      <div class="weight-btns" style="gap:5px;margin-bottom:10px;">
+        <button class="provider-btn weight-btn active" data-provider="google"     onclick="setProvider('google')">Google</button>
+        <button class="provider-btn weight-btn"        data-provider="elevenlabs" onclick="setProvider('elevenlabs')">ElevenLabs</button>
       </div>
+      <div id="voicePanel"></div>
+    </div>
+  </div>
 
-      <!-- Stats: sentences · reviewed · stories — updated by renderStoryScreen() -->
-      <div class="sb-info-bar" id="sbInfoBar">—</div>
-
-      <!-- SRS groups + story cards — rendered by renderStoryScreen() -->
-      <div id="sbGroupsContainer"></div>
-
-    </div><!-- /#storyScreen -->
-
-  </main>
-
-  <!-- ===== ADD SENTENCES MODAL ===== -->
   <div class="modal-overlay" id="addModal">
     <div class="modal">
       <h2>Add Sentences</h2>
@@ -197,131 +247,6 @@ I've never drunk wine."></textarea>
     </div>
   </div>
 
-  <!-- ===== SETTINGS PANEL ===== -->
-  <div class="settings-panel" id="settingsPanel">
-    <div class="settings-title">⚙ Typography Settings</div>
-
-    <div class="settings-row">
-      <div class="settings-label">
-        Font Size <span id="fontSizeVal">1.9rem</span>
-      </div>
-      <input type="range" id="fontSizeSlider" min="1" max="3.5" step="0.1" value="1.9">
-    </div>
-
-    <div class="settings-row">
-      <div class="settings-label">Font Weight</div>
-      <div class="weight-btns">
-        <button class="weight-btn" data-w="100" onclick="setWeight(this)">Thin</button>
-        <button class="weight-btn" data-w="200" onclick="setWeight(this)">ExLight</button>
-        <button class="weight-btn" data-w="300" onclick="setWeight(this)">Light</button>
-        <button class="weight-btn active" data-w="400" onclick="setWeight(this)">Regular</button>
-        <button class="weight-btn" data-w="500" onclick="setWeight(this)">Medium</button>
-        <button class="weight-btn" data-w="700" onclick="setWeight(this)">Bold</button>
-      </div>
-    </div>
-
-    <div class="settings-row" style="margin-bottom:0">
-      <div class="settings-label">Preview</div>
-      <div style="font-family:'Kikai Chokoku JIS','Noto Sans JP',serif;
-                  font-size:var(--jp-size);
-                  font-weight:var(--jp-weight);
-                  color:var(--text);
-                  padding:8px 0;
-                  line-height:1.6">日本語</div>
-    </div>
-
-    <div class="settings-divider"></div>
-
-    <div class="settings-row" style="margin-bottom:0">
-      <div class="settings-label">Voice</div>
-
-      <!-- Provider selector -->
-      <div class="weight-btns" style="gap:5px;margin-bottom:10px;">
-        <button class="provider-btn weight-btn active" data-provider="google"
-                onclick="setProvider('google')">Google</button>
-        <button class="provider-btn weight-btn" data-provider="elevenlabs"
-                onclick="setProvider('elevenlabs')">ElevenLabs</button>
-      </div>
-
-      <!-- Voice list — re-rendered by _renderVoicePanel() -->
-      <div id="voicePanel"></div>
-    </div>
-  </div>
-
-  <!-- ===== STORY GENERATE MODAL ===== -->
-  <!-- Opened by sbOpenGenModal(groupType). Uses existing .modal styles.  -->
-  <div class="modal-overlay" id="sbGenModal">
-    <div class="modal" style="max-width:440px">
-      <h2>Generate Story</h2>
-      <div class="sb-gen-subtitle" id="sbGenModalTitle">AGAIN FOCUS</div>
-      <div class="sb-gen-count"   id="sbGenModalCount">0 sentences available</div>
-
-      <!-- Pages slider -->
-      <div class="settings-row">
-        <div class="settings-label">
-          Pages <span id="sbPagesVal">5</span>
-        </div>
-        <input type="range" id="sbPagesSlider" min="1" max="20" step="1" value="5"
-               oninput="sbUpdatePagesSlider(this.value)">
-        <div class="sb-slider-hints"><span>1</span><span>20</span></div>
-      </div>
-
-      <!-- Anchor % slider -->
-      <div class="settings-row" style="margin-top:16px">
-        <div class="settings-label">
-          Anchor % <span id="sbAnchorPctVal">70</span>%
-        </div>
-        <input type="range" id="sbAnchorPctSlider" min="10" max="90" step="5" value="70"
-               oninput="sbUpdateAnchorPct(this.value)">
-        <div class="sb-slider-hints"><span>10% filler-heavy</span><span>90% anchor-heavy</span></div>
-      </div>
-
-      <!-- Page density / length -->
-      <div class="settings-row" style="margin-top:16px">
-        <div class="settings-label">Page length</div>
-        <div class="weight-btns">
-          <button class="sb-density-btn" data-chars="80"
-                  onclick="sbSetDensity(80)">Short</button>
-          <button class="sb-density-btn active" data-chars="120"
-                  onclick="sbSetDensity(120)">Medium</button>
-          <button class="sb-density-btn" data-chars="200"
-                  onclick="sbSetDensity(200)">Long</button>
-        </div>
-      </div>
-
-      <div class="modal-hint" style="margin-top:12px">
-        Anchor sentences from your rated cards appear verbatim in the story.
-        Anchor % controls how much of the story is your studied sentences vs AI filler.
-        Pages auto-adjust if you have fewer sentences than pages selected.
-      </div>
-
-      <div class="modal-actions" style="margin-top:20px">
-        <button class="btn" onclick="sbCloseGenModal()">Cancel</button>
-        <button class="btn btn-accent" onclick="sbConfirmGenerate()">✦ Generate</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== STORY READER OVERLAY ===== -->
-  <!-- Full-screen manga-panel reader — populated and opened by storyreader.js -->
-  <!-- JS opens via: overlay.style.display = 'flex'                            -->
-  <!-- JS closes via: overlay.style.display = 'none'                           -->
-  <div id="storyReaderOverlay" style="display:none"></div>
-
-  <!-- ===== WORD LOOKUP POPUP ===== -->
-  <div class="popup-overlay" id="wordPopup">
-    <div class="popup">
-      <button class="popup-close" onclick="closePopup()">✕</button>
-      <div class="popup-word"          id="popupWord"></div>
-      <div class="popup-reading"       id="popupReading"></div>
-      <div class="popup-meaning"       id="popupMeaning"></div>
-      <div class="popup-examples-title">Example Sentences</div>
-      <div id="popupExamples"></div>
-    </div>
-  </div>
-
-
-  <!-- ===== DECK MODAL ===== -->
   <div class="modal-overlay" id="deckModal">
     <div class="modal">
       <h2>Decks</h2>
@@ -334,26 +259,70 @@ I've never drunk wine."></textarea>
     </div>
   </div>
 
-  <!-- Mobile nav toggle pill — visible only on small screens -->
-  <button id="btnMobileNav" aria-label="Toggle navigation">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-         stroke-linecap="round" width="14" height="14">
-      <line x1="3" y1="6"  x2="21" y2="6"/>
-      <line x1="3" y1="12" x2="21" y2="12"/>
-      <line x1="3" y1="18" x2="21" y2="18"/>
-    </svg>
-    Nav
-  </button>
+  <div class="modal-overlay" id="sbGenModal">
+    <div class="modal" style="max-width:440px">
+      <h2>Generate Story</h2>
+      <div class="sb-gen-subtitle" id="sbGenModalTitle">AGAIN FOCUS</div>
+      <div class="sb-gen-count"   id="sbGenModalCount">0 sentences available</div>
+      <div class="settings-row">
+        <div class="settings-label">Pages <span id="sbPagesVal">5</span></div>
+        <input type="range" id="sbPagesSlider" min="1" max="20" step="1" value="5" oninput="sbUpdatePagesSlider(this.value)">
+        <div class="sb-slider-hints"><span>1</span><span>20</span></div>
+      </div>
+      <div class="settings-row" style="margin-top:16px">
+        <div class="settings-label">Anchor % <span id="sbAnchorPctVal">70</span>%</div>
+        <input type="range" id="sbAnchorPctSlider" min="10" max="90" step="5" value="70" oninput="sbUpdateAnchorPct(this.value)">
+        <div class="sb-slider-hints"><span>10% filler-heavy</span><span>90% anchor-heavy</span></div>
+      </div>
+      <div class="settings-row" style="margin-top:16px">
+        <div class="settings-label">Page length</div>
+        <div class="weight-btns">
+          <button class="sb-density-btn" data-chars="80"  onclick="sbSetDensity(80)">Short</button>
+          <button class="sb-density-btn active" data-chars="120" onclick="sbSetDensity(120)">Medium</button>
+          <button class="sb-density-btn" data-chars="200" onclick="sbSetDensity(200)">Long</button>
+        </div>
+      </div>
+      <div class="modal-hint" style="margin-top:12px">
+        Anchor sentences from your rated cards appear verbatim. Anchor % controls how much of the story is your studied sentences vs AI filler.
+      </div>
+      <div class="modal-actions" style="margin-top:20px">
+        <button class="btn" onclick="sbCloseGenModal()">Cancel</button>
+        <button class="btn btn-accent" onclick="sbConfirmGenerate()">✦ Generate</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="storyReaderOverlay" style="display:none"></div>
+
+  <div class="popup-overlay" id="wordPopup">
+    <div class="popup">
+      <button class="popup-close" onclick="closePopup()">✕</button>
+      <div class="popup-word"    id="popupWord"></div>
+      <div class="popup-reading" id="popupReading"></div>
+      <div class="popup-meaning" id="popupMeaning"></div>
+      <div class="popup-examples-title">Example Sentences</div>
+      <div id="popupExamples"></div>
+    </div>
+  </div>
 
 </div><!-- /.app -->
 
-<!-- Firebase SDK — must load before firebase.js -->
-<!-- kuromoji.js: Japanese morphological analyzer (self-hosted, see /dict folder) -->
+<script>
+function openSidebar()  { document.getElementById('sidebar').classList.add('open');    document.getElementById('sidebarOverlay').classList.add('active'); }
+function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebarOverlay').classList.remove('active'); }
+document.addEventListener('DOMContentLoaded', function() {
+  var ham = document.getElementById('btnMobileNav');
+  if (ham) ham.addEventListener('click', function() {
+    var sb = document.getElementById('sidebar');
+    if (sb.classList.contains('open')) closeSidebar(); else openSidebar();
+  });
+});
+</script>
+
 <script src="kuromoji.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<!-- App logic -->
 <script src="firebase.js"></script>
 <script src="decks.js"></script>
 <script src="tts.js"></script>
