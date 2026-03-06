@@ -734,7 +734,13 @@ function _sbGeneratePageImages(story) {
     var synth = { id: story.id + '_p' + idx, en: descText, jp: descText };
 
     return _sbFetchPageImage(synth).then(function(dataUrl) {
-      if (dataUrl && typeof _idbSet === 'function') _idbSet(synth.id, dataUrl);
+      if (dataUrl) {
+        // Write to IDB for persistence across sessions
+        if (typeof _idbSet === 'function') _idbSet(synth.id, dataUrl);
+        // Populate in-memory cache so the reader finds page 0 instantly
+        // when opened right after generation — no async IDB lookup needed.
+        if (typeof _imgCache !== 'undefined') _imgCache[synth.id] = dataUrl;
+      }
       return doPage(idx + 1);
     });
   }

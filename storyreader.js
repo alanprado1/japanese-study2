@@ -24,6 +24,12 @@ var _srSwipeStartY = 0;
 var _srSwipeDir    = null;   // 'h' | 'v' | null
 var _srSwipeWired  = false;  // prevent double-wiring
 
+// ─── Reflow state ─────────────────────────────────────────────
+// After measuring, _srReflowedPages replaces the raw story pages for
+// rendering. Null means no reflow has happened yet for this story.
+var _srReflowedPages = null;
+var _srReflowStoryId = null;  // which story was reflowed
+
 // ─── Open the reader ──────────────────────────────────────────
 function openStoryReader(story) {
   if (!story || !story.pages || !story.pages.length) return;
@@ -36,7 +42,29 @@ function openStoryReader(story) {
   if (!overlay) return;
   overlay.style.display = 'flex';
 
+  // Reflow cells to fit screen — runs once per story open, result cached
+  if (_srReflowStoryId !== story.id) {
+    _srReflowedPages = null;
+    _srReflowStoryId = story.id;
+  }
+
+  // Render first (so layout exists), then reflow + re-render if needed
   _srRenderPage();
+
+  // Schedule reflow after first paint so measurements are accurate
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      if (_srReflowedPages === null) {
+        _srReflowedPages = _srReflowAllPages(story);
+        // Only re-render if reflow actually changed page count or cell distribution
+        if (_srReflowedPages.length !== story.pages.length ||
+            _srReflowedPages[0].segments.length !== story.pages[0].segments.length) {
+          currentPageIdx = 0;
+          _srRenderPage();
+        }
+      }
+    });
+  });
 
   if (!_srSwipeWired) {
     _srWireSwipe(overlay);
@@ -48,8 +76,10 @@ function openStoryReader(story) {
 function closeStoryReader() {
   _srStopAudio();
   _srUnmountFontControls();
-  currentStory   = null;
-  currentPageIdx = 0;
+  currentStory     = null;
+  currentPageIdx   = 0;
+  _srReflowedPages = null;
+  _srReflowStoryId = null;
   var overlay = document.getElementById('storyReaderOverlay');
   if (overlay) overlay.style.display = 'none';
 }
@@ -57,7 +87,8 @@ function closeStoryReader() {
 // ─── Navigate pages ───────────────────────────────────────────
 function _srGoTo(idx) {
   if (!currentStory) return;
-  var total = currentStory.pages.length;
+  var pages = _srReflowedPages || currentStory.pages;
+  var total = pages.length;
   if (idx < 0 || idx >= total) return;
   _srStopAudio();
   currentPageIdx = idx;
@@ -79,14 +110,19 @@ function _srRenderPage() {
 
   var story    = currentStory;
   var pageIdx  = currentPageIdx;
-  var page     = story.pages[pageIdx];
-  var total    = story.pages.length;
+  // Use reflowed pages if available, else fall back to raw story pages
+  var pages    = _srReflowedPages || story.pages;
+  var page     = pages[pageIdx];
+  var total    = pages.length;
   var segments = page ? page.segments : [];
+  // For background images, map reflow page index back to the original page
+  // so we always use the correct pre-generated illustration key.
+  var bgPageIdx = (page && page.srcPageIdx !== undefined) ? page.srcPageIdx : pageIdx;
   var isFirst  = pageIdx === 0;
   var isLast   = pageIdx === total - 1;
 
   // ── Background image ───────────────────────────────────────
-  _srSetBackground(overlay, story, pageIdx);
+  _srSetBackground(overlay, story, bgPageIdx);
 
   // ── Title block — page 0 only ──────────────────────────────
   var titleHTML = '';
@@ -206,11 +242,123 @@ function _srRenderPage() {
   }
 
   // ── Prefetch next page's background image ─────────────────
-  // Starts fetching page N+1's illustration in the background so it's
-  // ready in _imgCache when the user navigates — no waiting at all.
   if (!isLast) {
-    _srPrefetchBackground(story, pageIdx + 1);
+    var nextPages  = _srReflowedPages || story.pages;
+    var nextPage   = nextPages[pageIdx + 1];
+    var nextBgIdx  = (nextPage && nextPage.srcPageIdx !== undefined) ? nextPage.srcPageIdx : pageIdx + 1;
+    _srPrefetchBackground(story, nextBgIdx);
   }
+}
+
+// ─── Page reflow — fit cells to screen height ────────────────
+//
+// Problem: Gemini may produce more segments per page than fit on screen,
+// causing cells to overflow below the fold. Since we can't know the exact
+// cell heights at generation time, we measure them after the first render
+// and redistribute segments so every page fits within the available area.
+//
+// Strategy:
+//   1. Measure available body height (overlay minus nav, title, bottom bar).
+//   2. Render each cell into a hidden off-screen div, record its height.
+//   3. Walk all cells in order; when accumulated height would exceed the
+//      available area, start a new reflow page.
+//   4. Each reflow page records srcPageIdx so background images stay correct.
+//
+// This runs once per story open, result cached in _srReflowedPages.
+
+function _srReflowAllPages(story) {
+  var overlay = document.getElementById('storyReaderOverlay');
+  if (!overlay) return story.pages;
+
+  // ── Measure available height ──────────────────────────────
+  // Total overlay minus: nav (~52px), bottom bar (~56px), title on p0 (~80px),
+  // padding (~32px). Use conservative estimate so we never clip.
+  var overlayH   = overlay.clientHeight || window.innerHeight;
+  var reservedH  = 52 + 56 + 32;   // nav + bottom bar + padding
+  var titleH     = 80;             // extra for page 0 title block
+  var availH     = overlayH - reservedH - 16; // 16px safety margin
+
+  // ── Build a hidden measuring container ────────────────────
+  var ruler = document.createElement('div');
+  ruler.setAttribute('aria-hidden', 'true');
+  ruler.style.cssText = [
+    'position:fixed', 'top:-9999px', 'left:0',
+    'width:' + (overlay.clientWidth || window.innerWidth) + 'px',
+    'visibility:hidden', 'pointer-events:none', 'z-index:-1',
+    // Match sr-story-body layout so cell widths are realistic
+    'display:flex', 'flex-direction:column', 'gap:10px', 'padding:0 20px'
+  ].join(';');
+  document.body.appendChild(ruler);
+
+  // ── Collect every segment from every raw page ─────────────
+  // Each entry carries srcPageIdx so we preserve background image mapping.
+  var allSegs = [];
+  for (var pi = 0; pi < story.pages.length; pi++) {
+    var segs = story.pages[pi].segments || [];
+    for (var si = 0; si < segs.length; si++) {
+      allSegs.push({ seg: segs[si], srcPageIdx: pi });
+    }
+  }
+
+  if (!allSegs.length) {
+    document.body.removeChild(ruler);
+    return story.pages;
+  }
+
+  // ── Measure each segment's rendered height ─────────────────
+  // We render the text content (without furigana/audio buttons for speed)
+  // just to get an accurate height estimate.
+  var segHeights = [];
+  for (var i = 0; i < allSegs.length; i++) {
+    var probe = document.createElement('div');
+    probe.className = 'sr-seg sr-seg-filler';
+    probe.style.cssText = 'width:100%;box-sizing:border-box;';
+    // Inner div mirrors sr-seg-text
+    var inner = document.createElement('div');
+    inner.className = 'sr-seg-text';
+    inner.textContent = allSegs[i].seg.text;
+    probe.appendChild(inner);
+    ruler.appendChild(probe);
+    segHeights.push(probe.offsetHeight || 60);
+    ruler.removeChild(probe);
+  }
+  document.body.removeChild(ruler);
+
+  // ── Distribute segments into reflow pages ─────────────────
+  var reflowed    = [];
+  var curSegs     = [];
+  var curSrc      = allSegs[0].srcPageIdx;
+  var accumulated = 0;
+  var gap         = 10; // matches CSS gap on sr-story-body
+
+  for (var i = 0; i < allSegs.length; i++) {
+    var h        = segHeights[i] + gap;
+    // First page has title block — reduce its budget
+    var budget   = (reflowed.length === 0) ? availH - titleH : availH;
+
+    // If adding this segment would overflow AND we already have at least one,
+    // flush current page and start a new one.
+    if (curSegs.length > 0 && accumulated + h > budget) {
+      reflowed.push({ segments: curSegs, srcPageIdx: curSrc });
+      curSegs     = [];
+      curSrc      = allSegs[i].srcPageIdx;
+      accumulated = 0;
+    }
+
+    curSegs.push(allSegs[i].seg);
+    // Update srcPageIdx to the dominant source page in this reflow page
+    if (allSegs[i].srcPageIdx !== curSrc && curSegs.length === 1) {
+      curSrc = allSegs[i].srcPageIdx;
+    }
+    accumulated += h;
+  }
+
+  // Flush the last page
+  if (curSegs.length) {
+    reflowed.push({ segments: curSegs, srcPageIdx: curSrc });
+  }
+
+  return reflowed.length ? reflowed : story.pages;
 }
 
 // ─── Slice segments into short audio cells ───────────────────
@@ -734,7 +882,8 @@ function _srTogglePageAudio(btn) {
   if (!btn) btn = document.getElementById('srPageAudioBtn');
   if (!btn || !currentStory || typeof speakJP !== 'function') return;
 
-  var page = currentStory.pages[currentPageIdx];
+  var pages = _srReflowedPages || currentStory.pages;
+  var page = pages[currentPageIdx];
   if (!page || !page.segments.length) return;
 
   // Concatenate segments. 。between them gives a natural TTS pause.
