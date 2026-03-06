@@ -484,128 +484,76 @@ function sbShowToast(msg, duration) {
 // ─── Level-calibrated prompt builder ─────────────────────────
 function _sbBuildPrompt(levelType, topic, settings) {
 
-  // ── Step 1: write the story as pure prose first ──────────────
-  // The key insight: ask Gemini to think like an author, not a JSON formatter.
-  // We separate the creative task ("write a story") from the structural task
-  // ("now format it") so neither contaminates the other.
-
   var totalPages = settings.totalPages || 5;
 
-  // How many prose paragraphs per page — drives the segment count
-  var parasPerPage = settings.charsPerPage <= 80  ? 2 :
-                     settings.charsPerPage <= 120 ? 3 : 4;
+  // Target character count per page — just a guide, not a hard constraint
+  var pageLen = settings.charsPerPage <= 80  ? '150〜250字' :
+                settings.charsPerPage <= 120 ? '250〜400字' : '400〜600字';
 
-  // Target paragraph length hint for the model
-  var paraLen = settings.charsPerPage <= 80  ? '2〜3文、40〜70字' :
-                settings.charsPerPage <= 120 ? '3〜4文、80〜130字' : '4〜6文、150〜220字';
-
-  // ── Level voice profiles ─────────────────────────────────────
-  // Written as author direction, not grammar rules.
-  // Each one describes a VOICE and gives a prose sample to imitate.
   var voices = {
-
     beginner:
-      '【文体】幼年向け絵本のような、やさしくあたたかい日本語。\n' +
-      'ひらがなを中心に、N5〜N4レベルの漢字のみ使う。\n' +
-      '一文は短く（10〜20字）、です・ます調で統一する。\n' +
-      'でも、文章には感情・場面・流れがある。教科書の例文を羅列するのではなく、\n' +
-      '登場人物の気持ちと出来事をつなげて書く。\n\n' +
-      '【良い例】\n' +
-      '「はるかは、コンビニのまえで、ふかく息をすいました。\n' +
-      ' ガラスのドアに、自分の顔がうつっています。\n' +
-      ' 「だいじょうぶ」と、こころのなかで言いました。\n' +
-      ' ドアがひらいて、つめたい空気がほおにふれました。」\n\n' +
-      '【悪い例（やってはいけない）】\n' +
-      '「今日は月曜日です。学校が終わりました。窓の外を見ます。空は青くてきれいです。」\n' +
-      '→ これは文の羅列であり、物語ではない。感情も流れもない。絶対に避けること。',
+      '【文体・レベル】\n' +
+      'やさしい日本語。ひらがなを中心に、N5〜N4レベルの漢字のみ。\n' +
+      'です・ます調で統一。一文は短めに。\n' +
+      'ただし、文章には感情・情景・流れがある。教科書の例文の羅列ではなく、\n' +
+      'ちゃんと読める物語にすること。\n\n' +
+      '【良い文体例】\n' +
+      'はるかは、コンビニのまえで深く息を吸いました。ガラスのドアに、自分の顔が映っています。「だいじょうぶ」と、心の中で言いました。ドアが開いて、冷たい空気がほおにふれました。',
 
     intermediate:
-      '【文体】現代の短編小説・ライトノベルに近い自然な日本語。\n' +
-      '地の文は普通体、会話は口語体で書く。\n' +
+      '【文体・レベル】\n' +
+      '現代の短編小説に近い自然な日本語。地の文は普通体、会話は口語体。\n' +
       'N3〜N2レベルの語彙と漢字。〜ので、〜けど、〜てしまう などを自然に使う。\n' +
-      '短い文と長い文を混ぜてリズムをつくる。\n' +
-      '登場人物の内面（思い、迷い、感情）を地の文に織り込む。\n\n' +
-      '【良い例】\n' +
-      '「改札を出た瞬間、雨のにおいがした。\n' +
-      ' 傘を持ってこなかったことを後悔しながら、莉子は空を見上げた。\n' +
-      ' 灰色の雲が低くたれこめている。今日だけは、早く帰りたくなかったのに。\n' +
-      ' スマホの画面には、母からのメッセージが三件届いていた。」\n\n' +
-      '【悪い例】\n' +
-      '「電車に乗りました。駅に着きました。雨が降っています。傘がありません。」\n' +
-      '→ 物語として読めない。感情も描写もない。',
+      '短い文と長い文を混ぜてリズムをつくる。登場人物の内面を地の文に織り込む。\n\n' +
+      '【良い文体例】\n' +
+      '改札を出た瞬間、雨のにおいがした。傘を持ってこなかったことを後悔しながら、莉子は空を見上げた。灰色の雲が低くたれこめている。今日だけは、早く帰りたくなかったのに。スマホの画面には、母からのメッセージが三件届いていた。',
 
     advanced:
-      '【文体】芥川龍之介・村上春樹・川端康成を参照した、文学的な日本語散文。\n' +
-      'N1レベルの語彙・漢字を積極的に使う。\n' +
-      '文の長短を大胆に変える。一語だけの文も、長い複文も、どちらも使う。\n' +
-      '描写・内省・余白を重視する。説明せず、見せる（show, don\'t tell）。\n' +
-      '心理描写、感覚描写、時制の揺らぎなどを自由に使う。\n\n' +
-      '【良い例】\n' +
-      '「光が、消えた。\n' +
-      ' 彼女が部屋を出て行ってから、もう三年が経つというのに、\n' +
-      ' 朝の白い空気の中で紅茶を飲むたびに、僕はあの夜のことを思い出さずにはいられない。\n' +
-      ' 記憶とは残酷なものだ——忘れたいものほど、鮮明に残る。」\n\n' +
-      '【悪い例】\n' +
-      '「今日は仕事がありました。疲れました。家に帰りました。ご飯を食べました。」\n' +
-      '→ 文体も深みもない。上級者向けには絶対に書かないこと。',
+      '【文体・レベル】\n' +
+      '文学的な日本語散文。村上春樹・川端康成のような質感を目指す。\n' +
+      'N1レベルの語彙・漢字を自由に使う。文の長短を大胆に変える。\n' +
+      '描写と内省を重視し、説明より感覚で語る。\n\n' +
+      '【良い文体例】\n' +
+      '光が、消えた。彼女が部屋を出て行ってから、もう三年が経つというのに、朝の白い空気の中で紅茶を飲むたびに、僕はあの夜のことを思い出さずにはいられない。記憶とは残酷なものだ——忘れたいものほど、鮮明に残る。',
 
     custom:
-      '【文体】ユーザーのプロンプトの指示に完全に従うこと。\n' +
-      'レベル・ジャンル・雰囲気はすべてプロンプトで指定されたものを優先する。\n' +
-      '自然な日本語で書く。翻訳調にならないこと。'
+      '【文体・レベル】\n' +
+      'ユーザーのプロンプトの指示に完全に従うこと。\n' +
+      '自然な日本語で書く。翻訳調・説明調にならないこと。'
   };
 
   var voice = voices[levelType] || voices.custom;
 
   return (
-    'あなたの返答はすべて、ひとつの有効なJSONオブジェクトでなければなりません。\n' +
-    'マークダウン、コードフェンス（```）、説明文は一切不要です。JSONのみ返してください。\n\n' +
+    '返答はひとつの有効なJSONオブジェクトのみ。マークダウン・コードフェンス・説明文は不要。\n\n' +
 
-    '=== 創作指示 ===\n\n' +
+    'あなたは日本語の短編小説を書く作家です。\n' +
+    '以下のテーマで、' + totalPages + 'ページの物語を書いてください。\n\n' +
 
-    'あなたは優れた日本の小説家です。\n' +
-    '以下のテーマをもとに、' + totalPages + 'ページの短編小説を日本語で書いてください。\n\n' +
-
-    '【テーマ・設定】\n' +
+    '【テーマ】\n' +
     topic + '\n\n' +
 
     voice + '\n\n' +
 
-    '【構成の要件】\n' +
-    '- ページ数：ちょうど' + totalPages + 'ページ\n' +
-    '- 各ページ：' + parasPerPage + '段落\n' +
-    '- 各段落：' + paraLen + '\n' +
-    '- 物語全体に一貫した流れを持たせること（起承転結、あるいは緊張と解放）\n' +
-    '- 同じ登場人物・世界・出来事の糸が最初から最後まで続くこと\n' +
-    '- 各ページは前のページから自然につながること\n' +
-    '- 書き出しは状況説明でなく、場面の中心に読者を引き込む一文から始めること\n\n' +
+    '【構成】\n' +
+    'ページ数：' + totalPages + 'ページ。各ページの目安：' + pageLen + '。\n' +
+    '物語全体に一貫した流れ（起承転結）を持たせること。\n' +
+    '同じ登場人物・世界が最初から最後まで続くこと。\n' +
+    '各ページは前のページから自然につながること。\n\n' +
 
-    '【禁止事項】\n' +
-    '- 無関係な文を並べるだけの「例文集」スタイルは絶対に禁止\n' +
-    '- 「今日は〜です。〜しました。〜です。」という単調な羅列は禁止\n' +
-    '- 英語を直訳したような不自然な日本語は禁止\n' +
-    '- 登場人物や場面が突然変わるのは禁止\n\n' +
-
-    '=== JSON形式 ===\n\n' +
-    '以下の形式で返してください。\n' +
-    'titleは日本語のタイトル、titleEnは英語のサブタイトルです。\n' +
-    'segmentsの各textは、ひとつの段落（複数文で構成された散文）です。\n\n' +
+    '【JSON形式】\n' +
+    'pagesの各要素は "text" フィールドひとつだけ。\n' +
+    '"text" にはそのページの散文をまるごと入れる。改行は\\nで表現する。\n' +
+    'セグメントへの分割は不要——ただの連続した物語文を書くこと。\n\n' +
     '{\n' +
     '  "title": "日本語タイトル",\n' +
     '  "titleEn": "English subtitle",\n' +
     '  "pages": [\n' +
-    '    {\n' +
-    '      "segments": [\n' +
-    '        { "type": "filler", "text": "段落ひとつ分の散文。複数の文で構成される。" },\n' +
-    '        { "type": "filler", "text": "次の段落。前の段落から自然につながる。" }\n' +
-    '      ]\n' +
-    '    }\n' +
+    '    { "text": "ページ1の散文がここに入る。複数の文が自然につながる。" },\n' +
+    '    { "text": "ページ2の散文。前のページから続く。" }\n' +
     '  ]\n' +
     '}\n\n' +
-    '※ typeはすべて "filler" です。anchorは使いません。\n' +
-    '※ 各segmentのtextは段落単位の散文で、1〜4文を含みます。\n' +
-    '※ JSONの外に何も書かないでください。\n\n' +
-    'それでは、物語を始めてください：'
+    'それでは書いてください：'
   );
 }
 
@@ -645,25 +593,61 @@ function _sbParseGeminiResponse(rawText) {
 
     for (var i = 0; i < parsed.pages.length; i++) {
       var page = parsed.pages[i];
-      if (!Array.isArray(page.segments)) {
-        if (Array.isArray(page)) {
-          parsed.pages[i] = { segments: page };
-          page = parsed.pages[i];
-        } else {
-          return null;
-        }
+
+      // ── New flat format: page has a single "text" string ──
+      // Split it into segments ourselves on sentence boundaries (。！？\n).
+      if (typeof page.text === 'string' && page.text.trim()) {
+        page.segments = _sbSplitIntoSegments(page.text);
+        continue;
       }
-      if (!page.segments.length) return null;
+
+      // ── Legacy segment format — still accept it ──
+      if (!Array.isArray(page.segments) || !page.segments.length) return null;
       for (var j = 0; j < page.segments.length; j++) {
         var seg = page.segments[j];
         if (typeof seg.text !== 'string' || !seg.text.trim()) return null;
-        // In cohesive mode everything is filler (prose) — no anchors
         seg.type = 'filler';
       }
     }
 
     return parsed;
   } catch(e) { return null; }
+}
+
+// Split a page of continuous prose into display segments.
+// Strategy: split on sentence-ending punctuation (。！？) keeping the
+// punctuation attached, then group every ~2 sentences into one segment
+// so the reader shows readable chunks rather than one sentence per cell.
+function _sbSplitIntoSegments(text) {
+  // Normalise line breaks to spaces first
+  var flat = text.replace(/\n+/g, '　');
+
+  // Split on Japanese sentence-ending punctuation, keeping delimiter
+  // Regex: split after 。！？」 (closing quote counts as sentence end too)
+  var raw = flat.split(/(?<=[。！？」…])/u);
+
+  // Filter empties
+  var sentences = [];
+  for (var i = 0; i < raw.length; i++) {
+    var s = raw[i].trim();
+    if (s) sentences.push(s);
+  }
+
+  if (!sentences.length) {
+    return [{ type: 'filler', text: text.trim() }];
+  }
+
+  // Group into segments of 2-3 sentences each
+  var segments = [];
+  var groupSize = 2;
+  for (var i = 0; i < sentences.length; i += groupSize) {
+    var chunk = sentences.slice(i, i + groupSize).join('');
+    if (chunk.trim()) {
+      segments.push({ type: 'filler', text: chunk.trim() });
+    }
+  }
+
+  return segments.length ? segments : [{ type: 'filler', text: text.trim() }];
 }
 
 // ─── Loading UI ───────────────────────────────────────────────
