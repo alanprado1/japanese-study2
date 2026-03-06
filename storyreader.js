@@ -24,47 +24,33 @@ var _srSwipeStartY = 0;
 var _srSwipeDir    = null;   // 'h' | 'v' | null
 var _srSwipeWired  = false;  // prevent double-wiring
 
-// ─── Page reflow state ────────────────────────────────────────
-// Segments are split into screen-sized pages by character budget.
-// This runs synchronously at open time — no DOM measurement needed.
-var _srPages      = null;  // reflowed page array
-var _srPagesId    = null;  // story.id the reflow was built for
+// ─── Page reflow ──────────────────────────────────────────────
+// charsPerPage setting → max cells per reader page:
+//   short  (≤80)  → 2 cells
+//   medium (≤120) → 3 cells
+//   long   (≥200) → 5 cells
+// totalPages tells Gemini how much to write; reader pages are derived here.
+var _srPages   = null;
+var _srPagesId = null;
 
-// Split all story segments into pages that fit the visible area.
-// Budget: 300 chars for page 0 (title block takes space), 420 for rest.
-// Each reflow page carries srcPageIdx for correct background image mapping.
+function _srMaxCells(story) {
+  var c = story && story.settings && story.settings.charsPerPage;
+  if (!c || c >= 200) return 5;
+  if (c >= 120)       return 3;
+  return 2;
+}
+
 function _srBuildPages(story) {
-  var all = [];
+  var max  = _srMaxCells(story);
+  var out  = [];
   for (var pi = 0; pi < story.pages.length; pi++) {
-    var segs = story.pages[pi].segments || [];
-    for (var si = 0; si < segs.length; si++) {
-      all.push({ seg: segs[si], srcPageIdx: pi });
+    var segs  = story.pages[pi].segments || [];
+    var cells = _srSliceCells(segs);
+    for (var ci = 0; ci < cells.length; ci += max) {
+      out.push({ cells: cells.slice(ci, ci + max), srcPageIdx: pi });
     }
   }
-  if (!all.length) return story.pages;
-
-  var BUDGET_P0 = 280;
-  var BUDGET    = 400;
-  var pages     = [];
-  var curSegs   = [];
-  var curSrc    = all[0].srcPageIdx;
-  var used      = 0;
-
-  for (var i = 0; i < all.length; i++) {
-    var chars  = all[i].seg.text.length;
-    var budget = pages.length === 0 ? BUDGET_P0 : BUDGET;
-    if (curSegs.length > 0 && used + chars > budget) {
-      pages.push({ segments: curSegs, srcPageIdx: curSrc });
-      curSegs = [];
-      curSrc  = all[i].srcPageIdx;
-      used    = 0;
-    }
-    if (curSegs.length === 0) curSrc = all[i].srcPageIdx;
-    curSegs.push(all[i].seg);
-    used += chars;
-  }
-  if (curSegs.length) pages.push({ segments: curSegs, srcPageIdx: curSrc });
-  return pages.length ? pages : story.pages;
+  return out.length ? out : null;
 }
 
 // ─── Open the reader ──────────────────────────────────────────
@@ -75,7 +61,7 @@ function openStoryReader(story) {
   currentPageIdx = 0;
   _srStopAudio();
 
-  // Build reflowed pages once per story
+  // Build cell-capped pages once per story
   if (_srPagesId !== story.id) {
     _srPages   = _srBuildPages(story);
     _srPagesId = story.id;
@@ -85,37 +71,26 @@ function openStoryReader(story) {
   if (!overlay) return;
   overlay.style.display = 'flex';
 
-  // Kick off page-0 background fetch immediately — before _srRenderPage —
-  // so the image arrives as early as possible. _srSetBackground will find
-  // it in _imgCache and apply synchronously if it's ready; otherwise the
-  // fetch callback applies it as soon as it lands.
-  var p0key = story.id + '_p0';
-  if (typeof _imgCache === 'undefined' || !_imgCache[p0key]) {
-    var _applyIfCurrent = function(dataUrl) {
+  // Pre-fetch page 0 background before render so it arrives ASAP
+  var _p0key = story.id + '_p0';
+  if (typeof _imgCache === 'undefined' || !_imgCache[_p0key]) {
+    var _applyP0 = function(dataUrl) {
       var ov = document.getElementById('storyReaderOverlay');
-      if (ov && ov.getAttribute('data-sr-bg-key') === p0key) {
+      if (ov && ov.getAttribute('data-sr-bg-key') === _p0key) {
         ov.style.backgroundImage = 'url(' + dataUrl + ')';
         ov.classList.add('sr-has-bg');
       }
     };
-    var _doFetch = function() {
-      _srBgFetch(p0key, _srBuildPrompt(story, 0), _applyIfCurrent);
-    };
+    var _fetchP0 = function() { _srBgFetch(_p0key, _srBuildPrompt(story, 0), _applyP0); };
     if (typeof _idbGet === 'function') {
-      _idbGet(p0key).then(function(rec) {
+      _idbGet(_p0key).then(function(rec) {
         if (rec) {
           var url = typeof rec === 'string' ? rec : (rec && rec.dataUrl);
-          if (url) {
-            if (typeof _imgCache !== 'undefined') _imgCache[p0key] = url;
-            _applyIfCurrent(url);
-            return;
-          }
+          if (url) { if (typeof _imgCache !== 'undefined') _imgCache[_p0key] = url; _applyP0(url); return; }
         }
-        _doFetch();
-      }).catch(_doFetch);
-    } else {
-      _doFetch();
-    }
+        _fetchP0();
+      }).catch(_fetchP0);
+    } else { _fetchP0(); }
   }
 
   _srRenderPage();
@@ -141,8 +116,7 @@ function closeStoryReader() {
 // ─── Navigate pages ───────────────────────────────────────────
 function _srGoTo(idx) {
   if (!currentStory) return;
-  var pages = _srPages || currentStory.pages;
-  var total = pages.length;
+  var total = _srPages ? _srPages.length : currentStory.pages.length;
   if (idx < 0 || idx >= total) return;
   _srStopAudio();
   currentPageIdx = idx;
@@ -164,12 +138,20 @@ function _srRenderPage() {
 
   var story    = currentStory;
   var pageIdx  = currentPageIdx;
-  var pages    = _srPages || story.pages;
-  var page     = pages[pageIdx];
-  var total    = pages.length;
-  var segments = page ? page.segments : [];
-  // Map reflow page → original page index for background images
-  var bgIdx    = (page && page.srcPageIdx !== undefined) ? page.srcPageIdx : pageIdx;
+
+  // Use reflowed pages if available
+  var rPage    = _srPages ? _srPages[pageIdx] : null;
+  var total    = _srPages ? _srPages.length : story.pages.length;
+  var bgIdx    = rPage ? rPage.srcPageIdx : pageIdx;
+  var cells    = rPage ? rPage.cells : null;
+
+  // Fallback: raw page segments → slice on the fly
+  if (!cells) {
+    var rawPage  = story.pages[pageIdx];
+    var segments = rawPage ? rawPage.segments : [];
+    cells = _srSliceCells(segments);
+  }
+
   var isFirst  = pageIdx === 0;
   var isLast   = pageIdx === total - 1;
 
@@ -196,11 +178,7 @@ function _srRenderPage() {
       '<button class="sr-nav-btn" onclick="_srGoTo(' + (pageIdx + 1) + ')"' + nextDis + '>Next →</button>' +
     '</div>';
 
-  // ── Story cells — sliced into ~15-char audio chunks ──────────
-  // _srSliceCells() annotates each char as anchor|filler, then slices
-  // at Japanese punctuation boundaries into cells of ~15 chars each.
-  // Order is preserved exactly from Gemini's narrative sequence.
-  var cells = _srSliceCells(segments);
+  // ── Story cells ────────────────────────────────────────────
   var bodyHTML = '<div class="sr-story-body">';
   for (var i = 0; i < cells.length; i++) {
     bodyHTML += _srRenderCell(cells[i]);
@@ -281,23 +259,21 @@ function _srRenderPage() {
     _srFetchFillerTranslations();
   }
 
-  // ── Prefetch this page's audio so Play button responds instantly ───
-  // prefetchJP() (tts.js) fetches + caches the audio in background.
-  // By the time user clicks Play, the cache hit makes playback immediate.
-  // Only runs for Google provider (ElevenLabs charges per character).
-  if (page && typeof prefetchJP === 'function') {
-    var _prefetchText = page.segments
-      .map(function(s) { return s.text.trim(); })
+  // ── Prefetch this page's audio ─────────────────────────────
+  if (typeof prefetchJP === 'function') {
+    var _prefetchText = cells
+      .map(function(c) { return c.text.trim(); })
       .filter(function(t) { return t.length > 0; })
       .join('\u3002');
     if (_prefetchText) prefetchJP(_prefetchText);
   }
 
   // ── Prefetch next page's background image ─────────────────
+  // Starts fetching page N+1's illustration in the background so it's
+  // ready in _imgCache when the user navigates — no waiting at all.
   if (!isLast) {
-    var nextPage  = pages[pageIdx + 1];
-    var nextBgIdx = (nextPage && nextPage.srcPageIdx !== undefined)
-      ? nextPage.srcPageIdx : pageIdx + 1;
+    var nextRPage = _srPages ? _srPages[pageIdx + 1] : null;
+    var nextBgIdx = nextRPage ? nextRPage.srcPageIdx : pageIdx + 1;
     _srPrefetchBackground(story, nextBgIdx);
   }
 }
@@ -823,22 +799,18 @@ function _srTogglePageAudio(btn) {
   if (!btn) btn = document.getElementById('srPageAudioBtn');
   if (!btn || !currentStory || typeof speakJP !== 'function') return;
 
-  var page = (_srPages || currentStory.pages)[currentPageIdx];
-  if (!page || !page.segments.length) return;
+  var pageCells = _srPages
+    ? (_srPages[currentPageIdx] ? _srPages[currentPageIdx].cells : [])
+    : _srSliceCells((currentStory.pages[currentPageIdx] || {}).segments || []);
 
-  // Concatenate segments. 。between them gives a natural TTS pause.
-  var allText = page.segments
-    .map(function(s) { return s.text.trim(); })
+  if (!pageCells.length) return;
+
+  var allText = pageCells
+    .map(function(c) { return c.text.trim(); })
     .filter(function(t) { return t.length > 0; })
     .join('\u3002');
 
   if (!allText) return;
-
-  // speakJP with the button element:
-  //  - 1st click while idle    → plays,   btn shows pause icon
-  //  - 2nd click while playing → pauses,  btn shows ▶
-  //  - 3rd click while paused  → resumes, btn shows pause icon
-  //  - audio ends naturally    → btn shows ▶
   speakJP(allText, btn).catch(function() {});
 }
 
