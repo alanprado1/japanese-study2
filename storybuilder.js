@@ -484,89 +484,128 @@ function sbShowToast(msg, duration) {
 // ─── Level-calibrated prompt builder ─────────────────────────
 function _sbBuildPrompt(levelType, topic, settings) {
 
-  var levelInstructions = {
-    beginner: (
-      'LEVEL: Beginner (初級)\n' +
-      '- Very short sentences (under 20 characters each)\n' +
-      '- Polite masu/desu form only\n' +
-      '- Simple て-form connectives\n' +
-      '- Common everyday vocabulary\n' +
-      '- Mostly hiragana, minimal kanji (JLPT N5-N4 kanji only)\n' +
-      '- No relative clauses, no complex grammar\n' +
-      '- Example style: 「今日は晴れです。公園へ行きます。花がきれいです。」'
-    ),
-    intermediate: (
-      'LEVEL: Intermediate (中級)\n' +
-      '- Mix of polite and plain form within narration\n' +
-      '- Natural dialogue in plain form\n' +
-      '- Subordinate clauses (〜ので、〜から、〜けど)\n' +
-      '- Moderate kanji (JLPT N3-N2 level)\n' +
-      '- Some complex grammar (〜てしまう、〜ようにする、conditionals)\n' +
-      '- Varied sentence length — short punchy lines mixed with longer ones\n' +
-      '- Example style: 「電車が遅れたので、会議に間に合わなかった。田中さんはため息をついた。」'
-    ),
-    advanced: (
-      'LEVEL: Advanced (上級)\n' +
-      '- Natural literary Japanese prose\n' +
-      '- Complex grammar freely (〜ざるを得ない、〜に過ぎない、〜にもかかわらず)\n' +
-      '- Rich kanji usage (JLPT N1 level vocabulary welcome)\n' +
-      '- Varied rhythm: sentence fragments, long flowing sentences\n' +
-      '- Internal monologue, atmosphere, subtext\n' +
-      '- Write like a published Japanese author\n' +
-      '- Example style: 「窓の外には、昨夜の雨に濡れた石畳が静かに光を反射していた。彼女はその光景を眺めながら、あの夜のことを思い出さずにはいられなかった。」'
-    ),
-    custom: (
-      'LEVEL: Follow the instructions in the topic/prompt below exactly.\n' +
-      'Adapt your grammar, vocabulary, and style to whatever the user specifies.'
-    )
+  // ── Step 1: write the story as pure prose first ──────────────
+  // The key insight: ask Gemini to think like an author, not a JSON formatter.
+  // We separate the creative task ("write a story") from the structural task
+  // ("now format it") so neither contaminates the other.
+
+  var totalPages = settings.totalPages || 5;
+
+  // How many prose paragraphs per page — drives the segment count
+  var parasPerPage = settings.charsPerPage <= 80  ? 2 :
+                     settings.charsPerPage <= 120 ? 3 : 4;
+
+  // Target paragraph length hint for the model
+  var paraLen = settings.charsPerPage <= 80  ? '2〜3文、40〜70字' :
+                settings.charsPerPage <= 120 ? '3〜4文、80〜130字' : '4〜6文、150〜220字';
+
+  // ── Level voice profiles ─────────────────────────────────────
+  // Written as author direction, not grammar rules.
+  // Each one describes a VOICE and gives a prose sample to imitate.
+  var voices = {
+
+    beginner:
+      '【文体】幼年向け絵本のような、やさしくあたたかい日本語。\n' +
+      'ひらがなを中心に、N5〜N4レベルの漢字のみ使う。\n' +
+      '一文は短く（10〜20字）、です・ます調で統一する。\n' +
+      'でも、文章には感情・場面・流れがある。教科書の例文を羅列するのではなく、\n' +
+      '登場人物の気持ちと出来事をつなげて書く。\n\n' +
+      '【良い例】\n' +
+      '「はるかは、コンビニのまえで、ふかく息をすいました。\n' +
+      ' ガラスのドアに、自分の顔がうつっています。\n' +
+      ' 「だいじょうぶ」と、こころのなかで言いました。\n' +
+      ' ドアがひらいて、つめたい空気がほおにふれました。」\n\n' +
+      '【悪い例（やってはいけない）】\n' +
+      '「今日は月曜日です。学校が終わりました。窓の外を見ます。空は青くてきれいです。」\n' +
+      '→ これは文の羅列であり、物語ではない。感情も流れもない。絶対に避けること。',
+
+    intermediate:
+      '【文体】現代の短編小説・ライトノベルに近い自然な日本語。\n' +
+      '地の文は普通体、会話は口語体で書く。\n' +
+      'N3〜N2レベルの語彙と漢字。〜ので、〜けど、〜てしまう などを自然に使う。\n' +
+      '短い文と長い文を混ぜてリズムをつくる。\n' +
+      '登場人物の内面（思い、迷い、感情）を地の文に織り込む。\n\n' +
+      '【良い例】\n' +
+      '「改札を出た瞬間、雨のにおいがした。\n' +
+      ' 傘を持ってこなかったことを後悔しながら、莉子は空を見上げた。\n' +
+      ' 灰色の雲が低くたれこめている。今日だけは、早く帰りたくなかったのに。\n' +
+      ' スマホの画面には、母からのメッセージが三件届いていた。」\n\n' +
+      '【悪い例】\n' +
+      '「電車に乗りました。駅に着きました。雨が降っています。傘がありません。」\n' +
+      '→ 物語として読めない。感情も描写もない。',
+
+    advanced:
+      '【文体】芥川龍之介・村上春樹・川端康成を参照した、文学的な日本語散文。\n' +
+      'N1レベルの語彙・漢字を積極的に使う。\n' +
+      '文の長短を大胆に変える。一語だけの文も、長い複文も、どちらも使う。\n' +
+      '描写・内省・余白を重視する。説明せず、見せる（show, don\'t tell）。\n' +
+      '心理描写、感覚描写、時制の揺らぎなどを自由に使う。\n\n' +
+      '【良い例】\n' +
+      '「光が、消えた。\n' +
+      ' 彼女が部屋を出て行ってから、もう三年が経つというのに、\n' +
+      ' 朝の白い空気の中で紅茶を飲むたびに、僕はあの夜のことを思い出さずにはいられない。\n' +
+      ' 記憶とは残酷なものだ——忘れたいものほど、鮮明に残る。」\n\n' +
+      '【悪い例】\n' +
+      '「今日は仕事がありました。疲れました。家に帰りました。ご飯を食べました。」\n' +
+      '→ 文体も深みもない。上級者向けには絶対に書かないこと。',
+
+    custom:
+      '【文体】ユーザーのプロンプトの指示に完全に従うこと。\n' +
+      'レベル・ジャンル・雰囲気はすべてプロンプトで指定されたものを優先する。\n' +
+      '自然な日本語で書く。翻訳調にならないこと。'
   };
 
-  var levelGuide = levelInstructions[levelType] || levelInstructions.custom;
-  var totalPages = settings.totalPages || 5;
-  var charsHint  = settings.charsPerPage <= 80  ? '60-90'  :
-                   settings.charsPerPage <= 120 ? '100-150' : '180-260';
+  var voice = voices[levelType] || voices.custom;
 
   return (
-    'IMPORTANT: Your entire response must be ONE valid JSON object. ' +
-    'No markdown, no code fences, no explanation. Pure JSON only.\n\n' +
+    'あなたの返答はすべて、ひとつの有効なJSONオブジェクトでなければなりません。\n' +
+    'マークダウン、コードフェンス（```）、説明文は一切不要です。JSONのみ返してください。\n\n' +
 
-    'You are a skilled Japanese author writing a short story for a language learner.\n\n' +
+    '=== 創作指示 ===\n\n' +
 
-    'WRITING PRINCIPLES:\n' +
-    '- Write a COHESIVE, NATURAL story — every sentence must serve the narrative\n' +
-    '- No random topic changes. One story, one world, one consistent thread\n' +
-    '- Characters introduced early must appear throughout\n' +
-    '- Each page flows naturally from the last\n' +
-    '- Write REAL Japanese, not translated English — think in Japanese\n\n' +
+    'あなたは優れた日本の小説家です。\n' +
+    '以下のテーマをもとに、' + totalPages + 'ページの短編小説を日本語で書いてください。\n\n' +
 
-    levelGuide + '\n\n' +
-
-    'TOPIC / PROMPT FROM USER:\n' +
+    '【テーマ・設定】\n' +
     topic + '\n\n' +
 
-    'STORY REQUIREMENTS:\n' +
-    '- Exactly ' + totalPages + ' pages\n' +
-    '- Each page: ' + charsHint + ' Japanese characters of story text\n' +
-    '- Every page has 3-6 segments (sentence groups)\n' +
-    '- Segments are short paragraphs of 1-3 sentences\n' +
-    '- The story must feel complete: beginning, middle, satisfying end\n' +
-    '- All segments are type "filler" (there are no anchor sentences in this mode)\n' +
-    '- Generate a compelling Japanese title and an evocative English subtitle\n\n' +
+    voice + '\n\n' +
 
-    'JSON STRUCTURE (return EXACTLY this shape):\n' +
+    '【構成の要件】\n' +
+    '- ページ数：ちょうど' + totalPages + 'ページ\n' +
+    '- 各ページ：' + parasPerPage + '段落\n' +
+    '- 各段落：' + paraLen + '\n' +
+    '- 物語全体に一貫した流れを持たせること（起承転結、あるいは緊張と解放）\n' +
+    '- 同じ登場人物・世界・出来事の糸が最初から最後まで続くこと\n' +
+    '- 各ページは前のページから自然につながること\n' +
+    '- 書き出しは状況説明でなく、場面の中心に読者を引き込む一文から始めること\n\n' +
+
+    '【禁止事項】\n' +
+    '- 無関係な文を並べるだけの「例文集」スタイルは絶対に禁止\n' +
+    '- 「今日は〜です。〜しました。〜です。」という単調な羅列は禁止\n' +
+    '- 英語を直訳したような不自然な日本語は禁止\n' +
+    '- 登場人物や場面が突然変わるのは禁止\n\n' +
+
+    '=== JSON形式 ===\n\n' +
+    '以下の形式で返してください。\n' +
+    'titleは日本語のタイトル、titleEnは英語のサブタイトルです。\n' +
+    'segmentsの各textは、ひとつの段落（複数文で構成された散文）です。\n\n' +
     '{\n' +
-    '  "title": "日本語のタイトル",\n' +
-    '  "titleEn": "English Subtitle",\n' +
+    '  "title": "日本語タイトル",\n' +
+    '  "titleEn": "English subtitle",\n' +
     '  "pages": [\n' +
     '    {\n' +
     '      "segments": [\n' +
-    '        { "type": "filler", "text": "Sentence one. Sentence two." },\n' +
-    '        { "type": "filler", "text": "Next paragraph here." }\n' +
+    '        { "type": "filler", "text": "段落ひとつ分の散文。複数の文で構成される。" },\n' +
+    '        { "type": "filler", "text": "次の段落。前の段落から自然につながる。" }\n' +
     '      ]\n' +
     '    }\n' +
     '  ]\n' +
     '}\n\n' +
-    'Begin the JSON now:'
+    '※ typeはすべて "filler" です。anchorは使いません。\n' +
+    '※ 各segmentのtextは段落単位の散文で、1〜4文を含みます。\n' +
+    '※ JSONの外に何も書かないでください。\n\n' +
+    'それでは、物語を始めてください：'
   );
 }
 
