@@ -260,21 +260,31 @@ I've never drunk wine."></textarea>
   </div>
 
   <div class="modal-overlay" id="sbGenModal">
-    <div class="modal" style="max-width:440px">
-      <h2>Generate Story</h2>
-      <div class="sb-gen-subtitle" id="sbGenModalTitle">AGAIN FOCUS</div>
-      <div class="sb-gen-count"   id="sbGenModalCount">0 sentences available</div>
-      <div class="settings-row">
+    <div class="modal" style="max-width:480px">
+      <h2>New Story</h2>
+      <div class="sb-gen-subtitle" id="sbGenModalTitle">Beginner — 初級</div>
+
+      <!-- Topic input -->
+      <div class="settings-row" style="margin-top:18px">
+        <div class="settings-label">What should the story be about?</div>
+        <textarea id="sbTopicInput" class="sb-topic-input"
+          placeholder="e.g. A day at a Japanese convenience store"
+          rows="3"></textarea>
+        <div class="modal-hint" style="margin-top:6px">
+          Be specific — characters, setting, mood. The AI will write a fully cohesive Japanese story around your prompt.
+        </div>
+      </div>
+
+      <!-- Pages -->
+      <div class="settings-row" style="margin-top:18px">
         <div class="settings-label">Pages <span id="sbPagesVal">5</span></div>
-        <input type="range" id="sbPagesSlider" min="1" max="20" step="1" value="5" oninput="sbUpdatePagesSlider(this.value)">
-        <div class="sb-slider-hints"><span>1</span><span>20</span></div>
+        <input type="range" id="sbPagesSlider" min="1" max="15" step="1" value="5"
+               oninput="sbUpdatePagesSlider(this.value)">
+        <div class="sb-slider-hints"><span>1</span><span>15</span></div>
       </div>
-      <div class="settings-row" style="margin-top:16px">
-        <div class="settings-label">Anchor % <span id="sbAnchorPctVal">70</span>%</div>
-        <input type="range" id="sbAnchorPctSlider" min="10" max="90" step="5" value="70" oninput="sbUpdateAnchorPct(this.value)">
-        <div class="sb-slider-hints"><span>10% filler-heavy</span><span>90% anchor-heavy</span></div>
-      </div>
-      <div class="settings-row" style="margin-top:16px">
+
+      <!-- Page length -->
+      <div class="settings-row" style="margin-top:14px">
         <div class="settings-label">Page length</div>
         <div class="weight-btns">
           <button class="sb-density-btn" data-chars="80"  onclick="sbSetDensity(80)">Short</button>
@@ -282,10 +292,8 @@ I've never drunk wine."></textarea>
           <button class="sb-density-btn" data-chars="200" onclick="sbSetDensity(200)">Long</button>
         </div>
       </div>
-      <div class="modal-hint" style="margin-top:12px">
-        Anchor sentences from your rated cards appear verbatim. Anchor % controls how much of the story is your studied sentences vs AI filler.
-      </div>
-      <div class="modal-actions" style="margin-top:20px">
+
+      <div class="modal-actions" style="margin-top:24px">
         <button class="btn" onclick="sbCloseGenModal()">Cancel</button>
         <button class="btn btn-accent" onclick="sbConfirmGenerate()">✦ Generate</button>
       </div>

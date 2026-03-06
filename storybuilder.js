@@ -1,73 +1,80 @@
 /* ============================================================
-   積む — storybuilder.js
-   Phase 4: Story selection screen, Firebase CRUD, SRS groups
+   積む — storybuilder.js  (v2 — Level-based cohesive stories)
 
-   Load order: 6th — after images.js, before app.js
-
-   Responsibilities (Session A):
-   ─ Firebase CRUD for users/{uid}/stories subcollection
-   ─ localStorage fallback when not signed in
-   ─ SRS group computation from srsData + sentences globals
-   ─ Story selection screen rendering
-   ─ Pre-generation settings modal (Gemini call stubbed → Session B)
-   ─ Enter / exit story mode, keyboard shortcut (Esc)
-   ─ Toast notifications
-   ─ Custom group attribute picker (persisted in localStorage)
-
-   IMPORTANT — Firestore security rules:
-   Add this to your Firebase console → Firestore → Rules:
-
-     match /users/{uid}/stories/{storyId} {
-       allow read, write: if request.auth != null && request.auth.uid == uid;
-     }
-
+   Key changes from v1:
+   ─ Removed SRS rating groups (again / hard / good)
+   ─ Replaced with language level groups: Beginner / Intermediate / Advanced
+   ─ Stories are fully AI-written, natural Japanese — no anchor sentence injection
+   ─ User provides a topic/prompt for each story; AI writes coherently
+   ─ Generate button sits on the LEFT of each level's card row
+   ─ Custom group preserved so users can specify anything
+   ─ Old stories (groupType: again/hard/good) gracefully show under Custom
    ============================================================ */
 
 // ─── Constants ───────────────────────────────────────────────
-var SB_MIN_SENTENCES = 3;   // minimum to enable Generate button
-
 var SB_ICONS = [
   '🌸','⛩','🗻','🌊','🎋','🏯','🌙','⛅',
-  '🍃','🦋','🎑','🌺','🍁','🎐','🌿','🪷'
+  '🍃','🦋','🎑','🌺','🍁','🎐','🌿','🪷',
+  '🍜','🎎','🎏','🌃','🍵','🏔','🎋','🌄'
 ];
 
-// Group definitions — colorClass maps to CSS
-var SB_GROUPS = [
-  { type: 'again', label: 'AGAIN Focus',     ratings: ['again'],        colorClass: 'sb-group-again' },
-  { type: 'hard',  label: 'HARD Challenges', ratings: ['hard'],         colorClass: 'sb-group-hard'  },
-  { type: 'good',  label: 'GOOD / EASY Mix', ratings: ['good', 'easy'], colorClass: 'sb-group-good'  }
+// Level group definitions
+var SB_LEVELS = [
+  {
+    type:       'beginner',
+    label:      'Beginner',
+    labelJa:    '初級',
+    colorClass: 'sb-group-beginner',
+    hint:       'Simple grammar · Short sentences · Hiragana-heavy',
+    placeholder:'e.g. A day at a Japanese convenience store'
+  },
+  {
+    type:       'intermediate',
+    label:      'Intermediate',
+    labelJa:    '中級',
+    colorClass: 'sb-group-intermediate',
+    hint:       'Mixed plain/polite · Subordinate clauses · Natural dialogue',
+    placeholder:'e.g. Two friends planning a trip to Kyoto'
+  },
+  {
+    type:       'advanced',
+    label:      'Advanced',
+    labelJa:    '上級',
+    colorClass: 'sb-group-advanced',
+    hint:       'Literary Japanese · Complex grammar · Kanji-rich',
+    placeholder:'e.g. A samurai contemplating duty in Edo-period Japan'
+  },
+  {
+    type:       'custom',
+    label:      'Custom',
+    labelJa:    'カスタム',
+    colorClass: 'sb-group-custom',
+    hint:       'Any style, any level — you describe it',
+    placeholder:'e.g. A horror story set in a haunted school at N2 level'
+  }
 ];
+
+// Gemini proxy
+var GEMINI_PROXY_URL = 'https://jpstudy-gemini.jpstudy.workers.dev/generate';
 
 // ─── Module state ─────────────────────────────────────────────
-var _sbStories      = {};    // { storyId: storyObject } — in-memory cache for current deck
-var _sbDeckId       = null;  // which deck's stories are currently loaded
-var _sbLoading      = false; // Firebase load in progress
+var _sbStories     = {};
+var _sbDeckId      = null;
+var _sbLoading     = false;
+var _sbGenerating  = false;
 
 // Generation settings — persisted to localStorage
-var _sbGenSettings  = { totalPages: 5, charsPerPage: 120, anchorPct: 70 };
+var _sbGenSettings = { totalPages: 5, charsPerPage: 120 };
 
-// Custom group — which SRS ratings to include
-var _sbCustomAttrs  = { again: false, hard: false, good: false };
-
-// Which group the user is about to generate a story for
-var _sbPendingGroup = null;
-
-// ─── Session B: generation state ─────────────────────────────
-// Gemini calls are proxied through a Cloudflare Worker so the API key
-// never appears in frontend code. Replace this URL after deploying the
-// worker (see gemini-proxy/worker.js for setup instructions).
-var GEMINI_PROXY_URL = 'https://jpstudy-gemini.jpstudy.workers.dev/generate'; 
+// Which level's Generate button was clicked
+var _sbPendingLevel = null;
 
 // Loading animation
 var _sbGenKanjiChars = ['語','話','文','書','物','夢','旅','星','風','花','心','月'];
 var _sbGenAnimTimer  = null;
 var _sbGenAnimIdx    = 0;
 
-// True while a generation is running — prevents renderStoryScreen() from
-// overwriting the loading / error UI that generation owns.
-var _sbGenerating = false;
-
-// ─── Deterministic story icon ─────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────
 function _sbIcon(storyId) {
   var hash = 0, s = String(storyId);
   for (var i = 0; i < s.length; i++) {
@@ -77,12 +84,10 @@ function _sbIcon(storyId) {
   return SB_ICONS[Math.abs(hash) % SB_ICONS.length];
 }
 
-// ─── Story ID generation ──────────────────────────────────────
 function _sbMakeId() {
   return 'story_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
 }
 
-// ─── HTML escape ──────────────────────────────────────────────
 function _sbEsc(str) {
   return String(str || '')
     .replace(/&/g, '&amp;')
@@ -91,12 +96,11 @@ function _sbEsc(str) {
     .replace(/"/g, '&quot;');
 }
 
-// ─── Find group definition by type ───────────────────────────
-function _sbFindGroup(type) {
-  for (var i = 0; i < SB_GROUPS.length; i++) {
-    if (SB_GROUPS[i].type === type) return SB_GROUPS[i];
+function _sbFindLevel(type) {
+  for (var i = 0; i < SB_LEVELS.length; i++) {
+    if (SB_LEVELS[i].type === type) return SB_LEVELS[i];
   }
-  return null;
+  return SB_LEVELS[3]; // fallback to custom
 }
 
 // ─── Firebase reference ───────────────────────────────────────
@@ -107,13 +111,9 @@ function _sbFireRef() {
 }
 
 // ─── localStorage helpers ─────────────────────────────────────
-
-function _sbLocalKey(deckId) {
-  return 'jpStudy_stories_' + deckId;
-}
+function _sbLocalKey(deckId) { return 'jpStudy_stories_' + deckId; }
 
 function _sbWriteLocal(deckId) {
-  // Write only this deck's stories
   try {
     var arr = [];
     var keys = Object.keys(_sbStories);
@@ -122,9 +122,7 @@ function _sbWriteLocal(deckId) {
       if (s.deckId === deckId) arr.push(s);
     }
     localStorage.setItem(_sbLocalKey(deckId), JSON.stringify(arr));
-  } catch(e) {
-    console.warn('[sb] localStorage write failed:', e);
-  }
+  } catch(e) { console.warn('[sb] localStorage write failed:', e); }
 }
 
 function _sbReadLocal(deckId) {
@@ -133,24 +131,15 @@ function _sbReadLocal(deckId) {
     if (!raw) return {};
     var arr = JSON.parse(raw);
     var map = {};
-    for (var i = 0; i < arr.length; i++) {
-      map[arr[i].id] = arr[i];
-    }
+    for (var i = 0; i < arr.length; i++) map[arr[i].id] = arr[i];
     return map;
-  } catch(e) {
-    return {};
-  }
+  } catch(e) { return {}; }
 }
 
-// ─── Load stories from Firebase (or local fallback) ───────────
+// ─── Load stories ─────────────────────────────────────────────
 function _sbLoadStories(deckId, callback) {
   var ref = _sbFireRef();
-
-  if (!ref) {
-    // Not signed in → use localStorage only
-    callback(_sbReadLocal(deckId));
-    return;
-  }
+  if (!ref) { callback(_sbReadLocal(deckId)); return; }
 
   _sbLoading = true;
   _sbRenderLoading();
@@ -158,145 +147,77 @@ function _sbLoadStories(deckId, callback) {
   ref.where('deckId', '==', deckId).get().then(function(snapshot) {
     var map = {};
     snapshot.forEach(function(docSnap) {
-      var d   = docSnap.data();
-      d.id    = docSnap.id;     // ensure id is always populated
+      var d = docSnap.data();
+      d.id  = docSnap.id;
       map[d.id] = d;
     });
-
-    // Merge in any local stories that didn't make it to Firebase
-    // (created offline, or before first sign-in)
-    var local = _sbReadLocal(deckId);
+    var local    = _sbReadLocal(deckId);
     var localKeys = Object.keys(local);
     for (var i = 0; i < localKeys.length; i++) {
-      var id = localKeys[i];
-      if (!map[id]) map[id] = local[id];
+      if (!map[localKeys[i]]) map[localKeys[i]] = local[localKeys[i]];
     }
-
     _sbLoading = false;
     callback(map);
   }).catch(function(err) {
-    console.warn('[sb] Firebase load failed — using localStorage:', err);
+    console.warn('[sb] Firebase load failed:', err);
     _sbLoading = false;
     callback(_sbReadLocal(deckId));
   });
 }
 
-// ─── Save a story (Firebase + localStorage) ───────────────────
-// Returns a Promise so callers can chain actions after save.
+// ─── Save / Delete ────────────────────────────────────────────
 function sbSaveStory(story) {
-  // Ensure required fields are always present
   if (!story.id)     story.id     = _sbMakeId();
   if (!story.deckId) story.deckId = currentDeckId;
-
-  // Update in-memory cache immediately (optimistic)
   _sbStories[story.id] = story;
   _sbWriteLocal(story.deckId);
-
   var ref = _sbFireRef();
   if (!ref) return Promise.resolve(story);
-
-  return ref.doc(story.id).set(story).then(function() {
-    return story;
-  }).catch(function(err) {
-    console.warn('[sb] Firebase story save failed:', err);
-    return story; // still available locally
-  });
+  return ref.doc(story.id).set(story).then(function() { return story; })
+    .catch(function(err) { console.warn('[sb] save failed:', err); return story; });
 }
 
-// ─── Delete a story (Firebase + localStorage) ─────────────────
 function sbDeleteStory(storyId) {
   var story = _sbStories[storyId];
   if (!story) return Promise.resolve();
   var deckId = story.deckId;
-
   delete _sbStories[storyId];
   _sbWriteLocal(deckId);
-
   var ref = _sbFireRef();
   if (!ref) return Promise.resolve();
-
   return ref.doc(storyId).delete().catch(function(err) {
-    console.warn('[sb] Firebase story delete failed:', err);
+    console.warn('[sb] delete failed:', err);
   });
 }
 
-// ─── SRS group computation ────────────────────────────────────
-// Returns { again: [], hard: [], good: [] } of sentence objects.
-// Only sentences that have been reviewed (have lastRating) are included.
-// This intentionally excludes unseen sentences — they haven't been judged yet.
-function sbGetSentencesByRating() {
-  var result = { again: [], hard: [], good: [] };
-  // Guard: globals might not exist yet during early parse
-  if (typeof sentences === 'undefined' || typeof srsData === 'undefined') return result;
-
-  for (var i = 0; i < sentences.length; i++) {
-    var s = sentences[i];
-    var d = srsData[s.id];
-    if (!d || !d.lastRating) continue;
-    if (d.lastRating === 'again') {
-      result.again.push(s);
-    } else if (d.lastRating === 'hard') {
-      result.hard.push(s);
-    } else if (d.lastRating === 'good' || d.lastRating === 'easy') {
-      result.good.push(s);
-    }
-  }
-  return result;
-}
-
-// Sentences for the custom group based on _sbCustomAttrs checkbox state
-function _sbCustomSentences() {
-  if (typeof sentences === 'undefined' || typeof srsData === 'undefined') return [];
-
-  var ratings = [];
-  if (_sbCustomAttrs.again) ratings.push('again');
-  if (_sbCustomAttrs.hard)  ratings.push('hard');
-  if (_sbCustomAttrs.good)  ratings.push('good', 'easy');
-  if (!ratings.length) return [];
-
+// ─── Stories for a level ──────────────────────────────────────
+function _sbStoriesForLevel(levelType) {
   var result = [];
-  for (var i = 0; i < sentences.length; i++) {
-    var s = sentences[i];
-    var d = srsData[s.id];
-    if (d && ratings.indexOf(d.lastRating) !== -1) result.push(s);
-  }
-  return result;
-}
-
-// Stories belonging to a specific group for the current deck, newest-first
-function _sbStoriesForGroup(groupType) {
-  var result = [];
-  var keys = Object.keys(_sbStories);
+  var keys   = Object.keys(_sbStories);
   for (var i = 0; i < keys.length; i++) {
     var s = _sbStories[keys[i]];
-    if (s.groupType === groupType && s.deckId === currentDeckId) result.push(s);
+    // Support both new (level) and old (groupType) field names
+    var lvl = s.level || s.groupType || 'custom';
+    // Map old SRS group names to custom
+    if (lvl === 'again' || lvl === 'hard' || lvl === 'good') lvl = 'custom';
+    if (lvl === levelType && s.deckId === currentDeckId) result.push(s);
   }
   result.sort(function(a, b) { return (b.generatedAt || 0) - (a.generatedAt || 0); });
   return result;
 }
 
 // ─── View state management ────────────────────────────────────
-
 function enterStoryMode() {
   isStoryMode = true;
-
-  // Add CSS class to <main> — this hides flashcardView, listView, statsBar,
-  // lengthFilterBar via style.css rules (no inline style manipulation so
-  // there's nothing to "forget" to clear when exiting).
   var mainEl = document.querySelector('main');
   if (mainEl) mainEl.classList.add('story-active');
-
-  // Show the story screen div itself
   var ss = document.getElementById('storyScreen');
   if (ss) ss.style.display = 'block';
-
-  // Activate the nav button
   var btn = document.getElementById('btnStoryBuilder');
   if (btn) btn.classList.add('active');
 
-  // If deck changed (or first visit), reload stories from Firebase/local
   if (_sbDeckId !== currentDeckId) {
-    _sbDeckId = currentDeckId;
+    _sbDeckId  = currentDeckId;
     _sbStories = {};
     _sbLoading = true;
     _sbRenderLoading();
@@ -305,44 +226,25 @@ function enterStoryMode() {
       _sbLoading = false;
       renderStoryScreen();
     });
-    return; // renderStoryScreen() called in callback above
+    return;
   }
-
   renderStoryScreen();
 }
 
 function exitStoryMode() {
   isStoryMode = false;
-
-  // Remove the CSS class — unhides flashcardView, listView, statsBar, lengthFilterBar
   var mainEl = document.querySelector('main');
   if (mainEl) mainEl.classList.remove('story-active');
-
-  // Hide the story screen div itself
   var ss = document.getElementById('storyScreen');
   if (ss) ss.style.display = 'none';
-
   var btn = document.getElementById('btnStoryBuilder');
   if (btn) btn.classList.remove('active');
-
-  // render() in app.js will now show card or list view correctly
   render();
 }
 
-// Toggle — called by the header button
 function toggleStoryMode() {
   if (isStoryMode) exitStoryMode();
   else             enterStoryMode();
-}
-
-// ─── DOM helpers ──────────────────────────────────────────────
-function _sbShowEl(id) {
-  var el = document.getElementById(id);
-  if (el) el.style.display = '';
-}
-function _sbHideEl(id) {
-  var el = document.getElementById(id);
-  if (el) el.style.display = 'none';
 }
 
 // ─── Loading state ────────────────────────────────────────────
@@ -357,19 +259,15 @@ function _sbRenderLoading() {
 }
 
 // ─── Main render ──────────────────────────────────────────────
-// Called by enterStoryMode(), Firebase pull callback, and render() in app.js
 function renderStoryScreen() {
   var container = document.getElementById('sbGroupsContainer');
   if (!container) return;
-
-  // Session B: generation owns the screen — don't overwrite the loading/error UI
   if (_sbGenerating) return;
 
-  // Deck changed while we were in story mode (e.g. Firebase pull changed currentDeckId)
   if (_sbDeckId !== currentDeckId) {
-    _sbDeckId   = currentDeckId;
-    _sbStories  = {};
-    _sbLoading  = true;
+    _sbDeckId  = currentDeckId;
+    _sbStories = {};
+    _sbLoading = true;
     _sbRenderLoading();
     _sbLoadStories(currentDeckId, function(map) {
       _sbStories = map;
@@ -378,166 +276,68 @@ function renderStoryScreen() {
     });
     return;
   }
-
   if (_sbLoading) { _sbRenderLoading(); return; }
 
-  // Info bar counters
-  var byRating = sbGetSentencesByRating();
-  var totalReviewed = 0;
-  var srsKeys = Object.keys(srsData);
-  for (var r = 0; r < srsKeys.length; r++) {
-    var d = srsData[srsKeys[r]];
-    if (d && d.lastRating) totalReviewed++;
-  }
-  var totalStoriesForDeck = 0;
-  var storyKeys = Object.keys(_sbStories);
-  for (var sk = 0; sk < storyKeys.length; sk++) {
-    if (_sbStories[storyKeys[sk]].deckId === currentDeckId) totalStoriesForDeck++;
+  // Info bar
+  var totalStories = 0;
+  var keys = Object.keys(_sbStories);
+  for (var k = 0; k < keys.length; k++) {
+    if (_sbStories[keys[k]].deckId === currentDeckId) totalStories++;
   }
 
   var infoEl = document.getElementById('sbInfoBar');
   if (infoEl) {
     infoEl.textContent =
-      sentences.length + ' sentences  ·  ' +
-      totalReviewed     + ' reviewed  ·  ' +
-      totalStoriesForDeck + ' ' + (totalStoriesForDeck === 1 ? 'story' : 'stories');
+      (typeof sentences !== 'undefined' ? sentences.length : 0) + ' sentences in deck  ·  ' +
+      totalStories + ' ' + (totalStories === 1 ? 'story' : 'stories') + ' saved';
   }
 
-  // ── No sentences in this deck ──
-  if (!sentences.length) {
-    container.innerHTML =
-      '<div class="sb-empty-screen">' +
-        '<div class="sb-empty-kanji">無</div>' +
-        '<p>No sentences in this deck yet.</p>' +
-        '<p>Add sentences and study some cards first — then come back here.</p>' +
-      '</div>';
-    return;
-  }
-
-  // ── Sentences exist but none reviewed yet ──
-  if (!totalReviewed) {
-    container.innerHTML =
-      '<div class="sb-empty-screen">' +
-        '<div class="sb-empty-kanji">未</div>' +
-        '<p>No cards reviewed yet in this deck.</p>' +
-        '<p>Study some flashcards first — your rated sentences will appear here as story groups.</p>' +
-      '</div>';
-    return;
-  }
-
-  // ── Render SRS groups + custom group ──
+  // Render level groups
   var html = '';
-  for (var i = 0; i < SB_GROUPS.length; i++) {
-    var group           = SB_GROUPS[i];
-    var groupSentences  = byRating[group.type] || [];
-    var groupStories    = _sbStoriesForGroup(group.type);
-    html += _sbRenderGroup(group, groupSentences, groupStories);
+  for (var i = 0; i < SB_LEVELS.length; i++) {
+    html += _sbRenderLevelGroup(SB_LEVELS[i]);
   }
-
-  var customSents   = _sbCustomSentences();
-  var customStories = _sbStoriesForGroup('custom');
-  html += _sbRenderCustomGroup(customSents, customStories);
-
   container.innerHTML = html;
 }
 
-// ─── Group section HTML builder ───────────────────────────────
-function _sbRenderGroup(group, groupSentences, groupStories) {
-  var count      = groupSentences.length;
-  var canGen     = count >= SB_MIN_SENTENCES;
-  var genDisAttr = canGen ? '' : ' disabled title="Need at least ' + SB_MIN_SENTENCES + ' sentences (have ' + count + ')"';
-  var genDisCls  = canGen ? '' : ' sb-btn-disabled';
+// ─── Level group HTML ─────────────────────────────────────────
+function _sbRenderLevelGroup(level) {
+  var stories = _sbStoriesForLevel(level.type);
 
-  var html = '<div class="sb-group ' + group.colorClass + '">';
+  var html = '<div class="sb-group ' + level.colorClass + '">';
 
-  // Header
+  // Header row
   html += '<div class="sb-group-header">';
-  html +=   '<div class="sb-group-label">' + _sbEsc(group.label) + '</div>';
-  html +=   '<div class="sb-group-count">' + count + ' sentence' + (count !== 1 ? 's' : '') + '</div>';
+  html +=   '<div class="sb-group-label-wrap">';
+  html +=     '<div class="sb-group-label">' + _sbEsc(level.label) + '</div>';
+  html +=     '<div class="sb-group-label-ja">' + _sbEsc(level.labelJa) + '</div>';
+  html +=   '</div>';
+  html +=   '<div class="sb-group-hint-text">' + _sbEsc(level.hint) + '</div>';
   html += '</div>';
 
-  // Card row
-  html += '<div class="sb-card-row">';
+  // Body: [Generate btn] + [story cards]
+  html += '<div class="sb-level-row">';
 
-  for (var i = 0; i < groupStories.length; i++) {
-    html += _sbRenderStoryCard(groupStories[i]);
+  // Generate button — left side, tall card
+  html += '<button class="sb-gen-card" onclick="sbOpenGenModal(\'' + level.type + '\')">';
+  html +=   '<span class="sb-gen-card-plus">+</span>';
+  html +=   '<span class="sb-gen-card-label">New Story</span>';
+  html += '</button>';
+
+  // Story cards scroll area
+  html += '<div class="sb-cards-scroll">';
+  if (stories.length === 0) {
+    html += '<div class="sb-cards-empty">No stories yet — generate your first one.</div>';
+  } else {
+    for (var i = 0; i < stories.length; i++) {
+      html += _sbRenderStoryCard(stories[i]);
+    }
   }
+  html += '</div>'; // .sb-cards-scroll
 
-  html += _sbRenderGenerateBtn(group.type, genDisAttr, genDisCls, count, canGen);
-
-  html += '</div>'; // .sb-card-row
-
-  // Hint when not enough sentences and no stories yet
-  if (!groupStories.length && !canGen) {
-    html += '<div class="sb-group-hint">' +
-      'Rate ' + (SB_MIN_SENTENCES - count) + ' more card' + (SB_MIN_SENTENCES - count !== 1 ? 's' : '') + ' as <em>' + group.label.split(' ')[0].toLowerCase() + '</em> to unlock.' +
-    '</div>';
-  }
-
+  html += '</div>'; // .sb-level-row
   html += '</div>'; // .sb-group
   return html;
-}
-
-// ─── Custom group HTML builder ────────────────────────────────
-function _sbRenderCustomGroup(customSents, customStories) {
-  var count  = customSents.length;
-  var noneSelected = !_sbCustomAttrs.again && !_sbCustomAttrs.hard && !_sbCustomAttrs.good;
-  var canGen = count >= SB_MIN_SENTENCES && !noneSelected;
-
-  var genDisAttr = canGen
-    ? ''
-    : ' disabled title="' + (noneSelected ? 'Select at least one rating' : 'Need at least ' + SB_MIN_SENTENCES + ' sentences (have ' + count + ')') + '"';
-  var genDisCls = canGen ? '' : ' sb-btn-disabled';
-
-  var html = '<div class="sb-group sb-group-custom">';
-
-  // Header
-  html += '<div class="sb-group-header">';
-  html +=   '<div class="sb-group-label">CUSTOM Mix</div>';
-  html +=   '<div class="sb-group-count">' + count + ' sentence' + (count !== 1 ? 's' : '') + '</div>';
-  html += '</div>';
-
-  // Attribute picker
-  html += '<div class="sb-custom-picker">';
-  html +=   '<span class="sb-custom-label">Include ratings:</span>';
-
-  var attrDefs = [
-    { key: 'again', label: 'Again',     cls: 'attr-again' },
-    { key: 'hard',  label: 'Hard',      cls: 'attr-hard'  },
-    { key: 'good',  label: 'Good/Easy', cls: 'attr-good'  }
-  ];
-  for (var a = 0; a < attrDefs.length; a++) {
-    var attr    = attrDefs[a];
-    var checked = _sbCustomAttrs[attr.key];
-    html += '<button class="sb-custom-attr ' + attr.cls + (checked ? ' active' : '') + '" ' +
-      'onclick="sbToggleCustomAttr(\'' + attr.key + '\')">' + attr.label + '</button>';
-  }
-
-  html += '</div>'; // .sb-custom-picker
-
-  // Card row
-  html += '<div class="sb-card-row">';
-  for (var ci = 0; ci < customStories.length; ci++) {
-    html += _sbRenderStoryCard(customStories[ci]);
-  }
-  html += _sbRenderGenerateBtn('custom', genDisAttr, genDisCls, count, canGen);
-  html += '</div>'; // .sb-card-row
-
-  if (!customStories.length && noneSelected) {
-    html += '<div class="sb-group-hint">Select one or more ratings above to build a mixed story.</div>';
-  }
-
-  html += '</div>'; // .sb-group
-  return html;
-}
-
-// ─── Generate button HTML ─────────────────────────────────────
-function _sbRenderGenerateBtn(groupType, disAttr, disCls, count, canGen) {
-  return '<button class="sb-generate-btn' + disCls + '" ' +
-    'onclick="sbOpenGenModal(\'' + groupType + '\')"' + disAttr + '>' +
-    '<span class="sb-generate-plus">+</span>' +
-    '<span>Generate</span>' +
-    '</button>';
 }
 
 // ─── Story card HTML ──────────────────────────────────────────
@@ -548,83 +348,59 @@ function _sbRenderStoryCard(story) {
   var date  = story.generatedAt
     ? new Date(story.generatedAt).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })
     : '?';
-
-  // story.id contains only word chars, underscores, hyphens — safe for onclick
   var sid = story.id;
 
-  return '<div class="sb-story-card" onclick="sbReadStory(\'' + sid + '\')" title="' + _sbEsc(title) + '">' +
-    '<button class="sb-story-delete" onclick="event.stopPropagation();sbConfirmDelete(\'' + sid + '\')" title="Delete story">✕</button>' +
-    '<button class="sb-story-regen"  onclick="event.stopPropagation();sbRegenerateStory(\'' + sid + '\')" title="Regenerate story">↻</button>' +
-    '<div class="sb-story-icon">' + icon + '</div>' +
-    '<div class="sb-story-title">' + _sbEsc(title) + '</div>' +
-    '<div class="sb-story-meta">' + pages + ' · ' + _sbEsc(date) + '</div>' +
-  '</div>';
-}
-
-// ─── Custom group attr toggle ─────────────────────────────────
-function sbToggleCustomAttr(key) {
-  _sbCustomAttrs[key] = !_sbCustomAttrs[key];
-  try { localStorage.setItem('jpStudy_sbCustomAttrs', JSON.stringify(_sbCustomAttrs)); } catch(e) {}
-  renderStoryScreen();
+  return (
+    '<div class="sb-story-card" onclick="sbReadStory(\'' + sid + '\')" title="' + _sbEsc(title) + '">' +
+      '<button class="sb-story-regen"  onclick="event.stopPropagation();sbRegenerateStory(\'' + sid + '\')" title="Regenerate">↻</button>' +
+      '<button class="sb-story-delete" onclick="event.stopPropagation();sbConfirmDelete(\'' + sid + '\')" title="Delete">✕</button>' +
+      '<div class="sb-story-icon">' + icon + '</div>' +
+      '<div class="sb-story-title">' + _sbEsc(title) + '</div>' +
+      '<div class="sb-story-meta">' + pages + ' · ' + _sbEsc(date) + '</div>' +
+    '</div>'
+  );
 }
 
 // ─── Generate modal ───────────────────────────────────────────
+function sbOpenGenModal(levelType) {
+  _sbPendingLevel = levelType;
 
-function sbOpenGenModal(groupType) {
-  _sbPendingGroup = groupType;
+  var level   = _sbFindLevel(levelType);
+  var titleEl = document.getElementById('sbGenModalTitle');
+  if (titleEl) titleEl.textContent = level.label + ' — ' + level.labelJa;
 
-  // Populate modal subtitle with group name + sentence count
-  var groupDef  = _sbFindGroup(groupType);
-  var titleEl   = document.getElementById('sbGenModalTitle');
-  if (titleEl) titleEl.textContent = groupDef ? groupDef.label : 'Custom Mix';
+  // Set placeholder on the topic input
+  var topicEl = document.getElementById('sbTopicInput');
+  if (topicEl) {
+    topicEl.value       = '';
+    topicEl.placeholder = level.placeholder;
+  }
 
-  var byRating  = sbGetSentencesByRating();
-  var count     = groupType === 'custom'
-    ? _sbCustomSentences().length
-    : (byRating[groupType] || []).length;
-
-  var countEl = document.getElementById('sbGenModalCount');
-  if (countEl) countEl.textContent = count + ' anchor sentence' + (count !== 1 ? 's' : '') + ' available';
-
-  // Restore slider values
-  var pagesSlider   = document.getElementById('sbPagesSlider');
-  var pagesVal      = document.getElementById('sbPagesVal');
-  var densityBtns   = document.querySelectorAll('.sb-density-btn');
-
+  // Restore sliders
+  var pagesSlider = document.getElementById('sbPagesSlider');
+  var pagesVal    = document.getElementById('sbPagesVal');
   if (pagesSlider) {
     pagesSlider.value = _sbGenSettings.totalPages;
     if (pagesVal) pagesVal.textContent = _sbGenSettings.totalPages;
   }
 
+  var densityBtns = document.querySelectorAll('.sb-density-btn');
   for (var i = 0; i < densityBtns.length; i++) {
     var b = densityBtns[i];
     b.classList.toggle('active', parseInt(b.dataset.chars, 10) === _sbGenSettings.charsPerPage);
   }
 
-  // Restore anchor % slider
-  var anchorSlider = document.getElementById('sbAnchorPctSlider');
-  var anchorVal    = document.getElementById('sbAnchorPctVal');
-  if (anchorSlider) {
-    anchorSlider.value = _sbGenSettings.anchorPct;
-    if (anchorVal) anchorVal.textContent = _sbGenSettings.anchorPct;
-  }
-
-  // Show modal
   var overlay = document.getElementById('sbGenModal');
   if (overlay) overlay.classList.add('active');
-}
 
-function sbUpdateAnchorPct(val) {
-  _sbGenSettings.anchorPct = parseInt(val, 10);
-  var el = document.getElementById('sbAnchorPctVal');
-  if (el) el.textContent = val;
-  try { localStorage.setItem('jpStudy_sbGenSettings', JSON.stringify(_sbGenSettings)); } catch(e) {}
+  // Focus topic input
+  setTimeout(function() { if (topicEl) topicEl.focus(); }, 80);
 }
 
 function sbCloseGenModal() {
   var overlay = document.getElementById('sbGenModal');
   if (overlay) overlay.classList.remove('active');
-  _sbPendingGroup = null;
+  _sbPendingLevel = null;
 }
 
 function sbUpdatePagesSlider(val) {
@@ -643,76 +419,58 @@ function sbSetDensity(chars) {
   try { localStorage.setItem('jpStudy_sbGenSettings', JSON.stringify(_sbGenSettings)); } catch(e) {}
 }
 
-// Called when user confirms generate in the modal.
-// Session B will replace the stub body with the real Gemini API call.
 function sbConfirmGenerate() {
-  if (!_sbPendingGroup) return;
+  if (!_sbPendingLevel) return;
 
-  // Capture groupType NOW — sbCloseGenModal() sets _sbPendingGroup = null,
-  // so reading _sbPendingGroup after that call would pass null to _sbRunGeneration.
-  var groupType = _sbPendingGroup;
+  var topicEl = document.getElementById('sbTopicInput');
+  var topic   = topicEl ? topicEl.value.trim() : '';
 
-  // Session B hook: if _sbRunGeneration is defined, delegate to it.
-  if (typeof _sbRunGeneration === 'function') {
-    sbCloseGenModal();
-    _sbRunGeneration(groupType, Object.assign({}, _sbGenSettings));
+  if (!topic) {
+    if (topicEl) {
+      topicEl.style.borderColor = 'var(--danger)';
+      topicEl.focus();
+      setTimeout(function() { topicEl.style.borderColor = ''; }, 1500);
+    }
     return;
   }
 
-  // ── Stub: Session A ──
+  var levelType = _sbPendingLevel;
+  var settings  = Object.assign({}, _sbGenSettings, { topic: topic, levelType: levelType });
+
   sbCloseGenModal();
-  sbShowToast('✦ Generation coming in Session B!', 3200);
+  _sbRunGeneration(levelType, settings);
 }
 
 // ─── Story actions ────────────────────────────────────────────
-
 function sbReadStory(storyId) {
   var story = _sbStories[storyId];
-  if (!story) { sbShowToast('Story not found.', 2000); return; }
-
-  if (!story.pages || !story.pages.length) {
-    sbShowToast('This story has no pages yet — generate it first.', 2500);
-    return;
-  }
-
-  // Delegate to storyreader.js (Session C provides full implementation)
-  if (typeof openStoryReader === 'function') {
-    openStoryReader(story);
-  } else {
-    sbShowToast('Story reader coming in Session C!', 2500);
-  }
+  if (!story)                            { sbShowToast('Story not found.', 2000); return; }
+  if (!story.pages || !story.pages.length) { sbShowToast('Story has no pages — try regenerating.', 2500); return; }
+  if (typeof openStoryReader === 'function') openStoryReader(story);
 }
 
 function sbConfirmDelete(storyId) {
   var story = _sbStories[storyId];
   if (!story) return;
-  var title = story.title || 'this story';
-  if (!confirm('Delete \u300c' + title + '\u300d?\nThis cannot be undone.')) return;
-
+  if (!confirm('Delete「' + (story.title || 'this story') + '」?\nThis cannot be undone.')) return;
   sbDeleteStory(storyId).then(function() {
     sbShowToast('Story deleted.', 1800);
     renderStoryScreen();
   });
 }
 
-// ─── Toast notification ───────────────────────────────────────
+// ─── Toast ────────────────────────────────────────────────────
 function sbShowToast(msg, duration) {
   var existing = document.getElementById('sbToast');
   if (existing) existing.remove();
-
-  var toast = document.createElement('div');
-  toast.id            = 'sbToast';
-  toast.className     = 'sb-toast';
-  toast.textContent   = msg;
+  var toast       = document.createElement('div');
+  toast.id        = 'sbToast';
+  toast.className = 'sb-toast';
+  toast.textContent = msg;
   document.body.appendChild(toast);
-
-  // Defer one frame so CSS transition fires
   requestAnimationFrame(function() {
-    requestAnimationFrame(function() {
-      toast.classList.add('sb-toast-visible');
-    });
+    requestAnimationFrame(function() { toast.classList.add('sb-toast-visible'); });
   });
-
   setTimeout(function() {
     toast.classList.remove('sb-toast-visible');
     setTimeout(function() { if (toast.parentNode) toast.remove(); }, 400);
@@ -720,95 +478,117 @@ function sbShowToast(msg, duration) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//   SESSION B: AI STORY GENERATION
-//   Gemini 1.5 Flash → parse JSON → Pollinations images → save
+//   AI STORY GENERATION  (natural, cohesive, level-based)
 // ═══════════════════════════════════════════════════════════════
 
-// ─── Prompt builder ───────────────────────────────────────────
-function _sbBuildPrompt(anchors, settings) {
-  var anchorList = anchors.map(function(s, i) {
-    return (i + 1) + '. ' + s.jp;
-  }).join('\n');
+// ─── Level-calibrated prompt builder ─────────────────────────
+function _sbBuildPrompt(levelType, topic, settings) {
 
-  var anchorsPerPage = Math.ceil(anchors.length / settings.totalPages);
+  var levelInstructions = {
+    beginner: (
+      'LEVEL: Beginner (初級)\n' +
+      '- Very short sentences (under 20 characters each)\n' +
+      '- Polite masu/desu form only\n' +
+      '- Simple て-form connectives\n' +
+      '- Common everyday vocabulary\n' +
+      '- Mostly hiragana, minimal kanji (JLPT N5-N4 kanji only)\n' +
+      '- No relative clauses, no complex grammar\n' +
+      '- Example style: 「今日は晴れです。公園へ行きます。花がきれいです。」'
+    ),
+    intermediate: (
+      'LEVEL: Intermediate (中級)\n' +
+      '- Mix of polite and plain form within narration\n' +
+      '- Natural dialogue in plain form\n' +
+      '- Subordinate clauses (〜ので、〜から、〜けど)\n' +
+      '- Moderate kanji (JLPT N3-N2 level)\n' +
+      '- Some complex grammar (〜てしまう、〜ようにする、conditionals)\n' +
+      '- Varied sentence length — short punchy lines mixed with longer ones\n' +
+      '- Example style: 「電車が遅れたので、会議に間に合わなかった。田中さんはため息をついた。」'
+    ),
+    advanced: (
+      'LEVEL: Advanced (上級)\n' +
+      '- Natural literary Japanese prose\n' +
+      '- Complex grammar freely (〜ざるを得ない、〜に過ぎない、〜にもかかわらず)\n' +
+      '- Rich kanji usage (JLPT N1 level vocabulary welcome)\n' +
+      '- Varied rhythm: sentence fragments, long flowing sentences\n' +
+      '- Internal monologue, atmosphere, subtext\n' +
+      '- Write like a published Japanese author\n' +
+      '- Example style: 「窓の外には、昨夜の雨に濡れた石畳が静かに光を反射していた。彼女はその光景を眺めながら、あの夜のことを思い出さずにはいられなかった。」'
+    ),
+    custom: (
+      'LEVEL: Follow the instructions in the topic/prompt below exactly.\n' +
+      'Adapt your grammar, vocabulary, and style to whatever the user specifies.'
+    )
+  };
+
+  var levelGuide = levelInstructions[levelType] || levelInstructions.custom;
+  var totalPages = settings.totalPages || 5;
+  var charsHint  = settings.charsPerPage <= 80  ? '60-90'  :
+                   settings.charsPerPage <= 120 ? '100-150' : '180-260';
 
   return (
     'IMPORTANT: Your entire response must be ONE valid JSON object. ' +
-    'No markdown, no code fences (```), no explanation. JSON only.\n\n' +
-    'You are a Japanese story writer creating study material for a language learner.\n\n' +
-    'CORE PRINCIPLE: The anchor sentences ARE the story. ' +
-    'Filler prose is only short connective tissue — 1 to 2 sentences maximum per filler segment. ' +
-    'The majority of text on every page must be anchor sentences, not filler.\n\n' +
-    'TASK: Write a ' + settings.totalPages + '-page Japanese story using ALL ' + anchors.length + ' anchor sentences below verbatim. ' +
-    'Roughly ' + (settings.anchorPct || 70) + '% of all segments should be anchor segments. ' +
-    'Spread them across pages (~' + anchorsPerPage + ' anchors per page). ' +
-    'Connect them with minimal natural bridging prose.\n\n' +
-    'ANCHOR SENTENCES — use ALL of them, copied exactly character for character:\n' +
-    anchorList + '\n\n' +
-    'REQUIREMENTS:\n' +
-    '- Exactly ' + settings.totalPages + ' pages\n' +
-    '- Every anchor sentence must appear exactly once across all pages\n' +
-    '- Each page should have roughly ' + anchorsPerPage + ' anchor segments (' + (settings.anchorPct || 70) + '% anchor target)\n' +
-    '- Filler segments: SHORT bridging only (1-2 sentences max). Never write long filler paragraphs\n' +
-    '- Never put two filler segments in a row — always separate them with at least one anchor\n' +
-    '- Filler must be natural Japanese at the same difficulty level as the anchors\n' +
-    '- "title": a compelling Japanese story title\n' +
-    '- "titleEn": an evocative English subtitle\n\n' +
-    'JSON STRUCTURE:\n' +
+    'No markdown, no code fences, no explanation. Pure JSON only.\n\n' +
+
+    'You are a skilled Japanese author writing a short story for a language learner.\n\n' +
+
+    'WRITING PRINCIPLES:\n' +
+    '- Write a COHESIVE, NATURAL story — every sentence must serve the narrative\n' +
+    '- No random topic changes. One story, one world, one consistent thread\n' +
+    '- Characters introduced early must appear throughout\n' +
+    '- Each page flows naturally from the last\n' +
+    '- Write REAL Japanese, not translated English — think in Japanese\n\n' +
+
+    levelGuide + '\n\n' +
+
+    'TOPIC / PROMPT FROM USER:\n' +
+    topic + '\n\n' +
+
+    'STORY REQUIREMENTS:\n' +
+    '- Exactly ' + totalPages + ' pages\n' +
+    '- Each page: ' + charsHint + ' Japanese characters of story text\n' +
+    '- Every page has 3-6 segments (sentence groups)\n' +
+    '- Segments are short paragraphs of 1-3 sentences\n' +
+    '- The story must feel complete: beginning, middle, satisfying end\n' +
+    '- All segments are type "filler" (there are no anchor sentences in this mode)\n' +
+    '- Generate a compelling Japanese title and an evocative English subtitle\n\n' +
+
+    'JSON STRUCTURE (return EXACTLY this shape):\n' +
     '{\n' +
-    '  "title": "物語のタイトル",\n' +
-    '  "titleEn": "English Subtitle Here",\n' +
+    '  "title": "日本語のタイトル",\n' +
+    '  "titleEn": "English Subtitle",\n' +
     '  "pages": [\n' +
     '    {\n' +
     '      "segments": [\n' +
-    '        { "type": "filler", "text": "Short bridge." },\n' +
-    '        { "type": "anchor", "text": "exact anchor verbatim", "anchorIdx": 1 },\n' +
-    '        { "type": "anchor", "text": "exact anchor verbatim", "anchorIdx": 2 },\n' +
-    '        { "type": "filler", "text": "Short bridge." },\n' +
-    '        { "type": "anchor", "text": "exact anchor verbatim", "anchorIdx": 3 }\n' +
+    '        { "type": "filler", "text": "Sentence one. Sentence two." },\n' +
+    '        { "type": "filler", "text": "Next paragraph here." }\n' +
     '      ]\n' +
     '    }\n' +
     '  ]\n' +
     '}\n\n' +
-    'Segment rules:\n' +
-    '- "filler": short bridging prose only, 1-2 sentences, never two in a row\n' +
-    '- "anchor": copied EXACTLY character for character — do not change anything\n' +
-    '- "anchorIdx": the 1-based number of that anchor from the list above\n\n' +
     'Begin the JSON now:'
   );
 }
 
-// ─── Gemini API call (via proxy) ─────────────────────────────
-// The proxy (Cloudflare Worker) holds the API key server-side.
-// We send only the prompt; the proxy forwards it to Gemini and returns { text }.
+// ─── Gemini API call ──────────────────────────────────────────
 function _sbCallGemini(prompt) {
   return fetch(GEMINI_PROXY_URL, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      prompt:          prompt,
-      temperature:     0.85,
-      maxOutputTokens: 16384
-    })
+    body: JSON.stringify({ prompt: prompt, temperature: 0.9, maxOutputTokens: 16384 })
   })
   .then(function(r) { return r.json(); })
   .then(function(data) {
-    if (data.error) {
-      throw new Error(data.error);
-    }
-    if (!data.text) {
-      throw new Error('Unexpected proxy response:\n' + JSON.stringify(data).slice(0, 400));
-    }
+    if (data.error) throw new Error(data.error);
+    if (!data.text) throw new Error('Unexpected proxy response:\n' + JSON.stringify(data).slice(0, 400));
     return data.text;
   });
 }
 
 // ─── Response parser ──────────────────────────────────────────
-// Returns a validated story structure or null on any failure.
-function _sbParseGeminiResponse(rawText, anchors) {
+function _sbParseGeminiResponse(rawText) {
   if (!rawText || typeof rawText !== 'string') return null;
 
-  // Strip markdown code fences Gemini sometimes emits despite instructions
   var cleaned = rawText.trim()
     .replace(/^```json\s*/i, '')
     .replace(/^```\s*/,      '')
@@ -817,23 +597,17 @@ function _sbParseGeminiResponse(rawText, anchors) {
 
   try {
     var parsed = JSON.parse(cleaned);
-
-    // ── Required top-level fields ──
     if (typeof parsed.title !== 'string' || !parsed.title.trim()) return null;
     if (!Array.isArray(parsed.pages)     || !parsed.pages.length)  return null;
 
-    // titleEn fallback
     if (typeof parsed.titleEn !== 'string' || !parsed.titleEn.trim()) {
       parsed.titleEn = parsed.title;
     }
 
-    // ── Validate + normalise pages ──
     for (var i = 0; i < parsed.pages.length; i++) {
       var page = parsed.pages[i];
-      // Handle Gemini occasionally wrapping segments inside a "page" object differently
       if (!Array.isArray(page.segments)) {
         if (Array.isArray(page)) {
-          // Some models return pages as an array-of-segment-arrays
           parsed.pages[i] = { segments: page };
           page = parsed.pages[i];
         } else {
@@ -841,32 +615,21 @@ function _sbParseGeminiResponse(rawText, anchors) {
         }
       }
       if (!page.segments.length) return null;
-
       for (var j = 0; j < page.segments.length; j++) {
         var seg = page.segments[j];
         if (typeof seg.text !== 'string' || !seg.text.trim()) return null;
-
-        // Normalise type — anything not 'anchor' becomes 'filler'
-        seg.type = (seg.type === 'anchor') ? 'anchor' : 'filler';
-
-        // Inject sentenceId so Session C can highlight anchor segments
-        if (seg.type === 'anchor' && seg.anchorIdx) {
-          var anchorRef = anchors[parseInt(seg.anchorIdx, 10) - 1];
-          if (anchorRef) seg.sentenceId = String(anchorRef.id);
-        }
+        // In cohesive mode everything is filler (prose) — no anchors
+        seg.type = 'filler';
       }
     }
 
     return parsed;
-  } catch(e) {
-    return null;
-  }
+  } catch(e) { return null; }
 }
 
 // ─── Loading UI ───────────────────────────────────────────────
-
 function _sbShowGenLoading(statusText) {
-  _sbStopGenLoading(); // clear any previous interval
+  _sbStopGenLoading();
   _sbGenAnimIdx = 0;
 
   var container = document.getElementById('sbGroupsContainer');
@@ -895,19 +658,15 @@ function _sbStopGenLoading() {
 }
 
 // ─── Error UI ─────────────────────────────────────────────────
-// Shows raw Gemini output inline on the story screen for debugging.
-
 function _sbShowGenError(rawText) {
   _sbGenerating = false;
   _sbStopGenLoading();
-
   var container = document.getElementById('sbGroupsContainer');
   if (!container) return;
-
   container.innerHTML =
     '<div class="sb-gen-error">' +
       '<div class="sb-gen-error-title">⚠ Generation Failed</div>' +
-      '<div class="sb-gen-error-hint">Raw response from Gemini (for debugging):</div>' +
+      '<div class="sb-gen-error-hint">Raw response (for debugging):</div>' +
       '<pre class="sb-gen-error-raw">' + _sbEsc(rawText || '(no response)') + '</pre>' +
       '<div class="sb-gen-error-actions">' +
         '<button class="btn" onclick="renderStoryScreen()">← Back to Stories</button>' +
@@ -915,240 +674,125 @@ function _sbShowGenError(rawText) {
     '</div>';
 }
 
-// ─── Silent page image fetcher ────────────────────────────────
-// Reuses Pollinations URL builder + IDB helpers from images.js.
-// Returns a Promise<dataUrl|null> — never rejects.
-
+// ─── Page image generation ────────────────────────────────────
 function _sbFetchPageImage(sentence) {
   return new Promise(function(resolve) {
     if (typeof _buildPrimaryUrl !== 'function') { resolve(null); return; }
-
     var url = _buildPrimaryUrl(sentence);
-    var tid = setTimeout(function() { resolve(null); }, 35000); // 35s hard timeout
-
+    var tid = setTimeout(function() { resolve(null); }, 35000);
     fetch(url)
-      .then(function(r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.blob();
-      })
+      .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
       .then(function(blob) {
         return new Promise(function(res, rej) {
-          var reader    = new FileReader();
+          var reader = new FileReader();
           reader.onloadend = function() { res(reader.result); };
           reader.onerror   = rej;
           reader.readAsDataURL(blob);
         });
       })
-      .then(function(dataUrl) {
-        clearTimeout(tid);
-        resolve(dataUrl);
-      })
-      .catch(function() {
-        clearTimeout(tid);
-        resolve(null); // image failure is non-fatal — story still saved
-      });
+      .then(function(dataUrl) { clearTimeout(tid); resolve(dataUrl); })
+      .catch(function() { clearTimeout(tid); resolve(null); });
   });
 }
 
-// ─── Sequential page image generation ────────────────────────
-// Generates one Ghibli-style image per page, stored in IDB.
-// Status bar updated after each page so the user sees progress.
-
 function _sbGeneratePageImages(story) {
-  // Story illustrations always generate — they are part of the story itself,
-  // not the same as card images. The deck imageGen toggle is for card view only.
-  // The reader falls back to direct Pollinations URLs if images are missing,
-  // but pre-generating here gives instant display without a live API call.
-
   var pages = story.pages;
   var total = pages.length;
 
   function doPage(idx) {
     if (idx >= total) return Promise.resolve();
+    _sbUpdateGenStatus('Generating illustration ' + (idx + 1) + '\u00a0/\u00a0' + total + '\u2026');
 
-    _sbUpdateGenStatus(
-      'Generating illustration ' + (idx + 1) + '\u00a0/\u00a0' + total + '\u2026'
-    );
-
-    // Use first filler segment text as the image prompt description
     var descText = story.titleEn || story.title || '';
     for (var i = 0; i < pages[idx].segments.length; i++) {
-      if (pages[idx].segments[i].type === 'filler') {
-        // Trim to 90 chars — Pollinations prompt cap
-        descText = pages[idx].segments[i].text.slice(0, 90);
-        break;
-      }
+      descText = pages[idx].segments[i].text.slice(0, 90);
+      break;
     }
-
-    // Synthetic sentence object matching the shape _buildPrimaryUrl expects
-    var synth = {
-      id: story.id + '_p' + idx,
-      en: descText,
-      jp: descText
-    };
+    var synth = { id: story.id + '_p' + idx, en: descText, jp: descText };
 
     return _sbFetchPageImage(synth).then(function(dataUrl) {
-      // Store in IDB so Session C reader can retrieve it by key
-      if (dataUrl && typeof _idbSet === 'function') {
-        _idbSet(synth.id, dataUrl);
-      }
+      if (dataUrl && typeof _idbSet === 'function') _idbSet(synth.id, dataUrl);
       return doPage(idx + 1);
     });
   }
-
   return doPage(0);
 }
 
-// ─── Main generation entry point ─────────────────────────────
-// Called by sbConfirmGenerate() hook (Session A stub detects this function).
-// Also called by sbRegenerateStory() with an existingStoryId to overwrite.
-
-function _sbRunGeneration(groupType, settings, existingStoryId) {
-
-  // ── 1. Gather anchor pool for this group ──
-  var byRating = sbGetSentencesByRating();
-  var pool     = (groupType === 'custom')
-    ? _sbCustomSentences()
-    : (byRating[groupType] || []);
-
-  if (pool.length < SB_MIN_SENTENCES) {
-    sbShowToast('Not enough rated sentences to generate.', 2500);
-    return;
-  }
-
-  // ── 2. Auto-adjust page count if pool is too small ──
-  // Each page needs at least 1 anchor. If fewer sentences than pages, shrink pages.
-  var autoPages = Math.min(settings.totalPages, pool.length);
-  if (autoPages < settings.totalPages) {
-    settings = Object.assign({}, settings, { totalPages: autoPages });
-    sbShowToast('Pages reduced to ' + autoPages + ' to match available sentences.', 3000);
-  }
-
-  // ── 3. Anchor selection — driven by anchorPct slider ──
-  // anchorPct = target % of segments that should be anchor sentences.
-  // Estimate total segments per page as ~4 (3 anchor + 1 filler at 70%).
-  // Cap at 60 to avoid Gemini context limits; always at least 2 per page.
-  var pct        = (settings.anchorPct || 70) / 100;
-  var segsPerPage = 4;
-  var numAnchors = Math.min(
-    pool.length,
-    60,
-    Math.max(2, Math.round(settings.totalPages * segsPerPage * pct))
-  );
-  var shuffled = pool.slice().sort(function() { return Math.random() - 0.5; });
-  var anchors  = shuffled.slice(0, numAnchors);
-
-  // ── 3. Lock screen: show animated loading ──
+// ─── Main generation ──────────────────────────────────────────
+function _sbRunGeneration(levelType, settings, existingStoryId) {
   _sbGenerating = true;
-  _sbShowGenLoading('Generating\u2026');
+  _sbShowGenLoading('Writing story…');
 
-  // ── 4. Build prompt + call API ──
-  var prompt = _sbBuildPrompt(anchors, settings);
+  var prompt = _sbBuildPrompt(levelType, settings.topic || '', settings);
 
   _sbCallGemini(prompt)
     .then(function(rawText) {
+      _sbUpdateGenStatus('Parsing…');
+      var parsed = _sbParseGeminiResponse(rawText);
+      if (!parsed) { _sbShowGenError(rawText); return; }
 
-      _sbUpdateGenStatus('Parsing story\u2026');
-
-      // ── 5. Parse + validate ──
-      var parsed = _sbParseGeminiResponse(rawText, anchors);
-
-      if (!parsed) {
-        _sbShowGenError(rawText);
-        return;
-      }
-
-      // ── 6. Build story object ──
       var storyId = existingStoryId || _sbMakeId();
       var story = {
         id:          storyId,
         deckId:      currentDeckId,
-        groupType:   groupType,
+        level:       levelType,
         title:       parsed.title,
         titleEn:     parsed.titleEn,
+        topic:       settings.topic || '',
         generatedAt: Date.now(),
-        anchorIds:   anchors.map(function(s) { return s.id; }),
         settings:    { totalPages: settings.totalPages, charsPerPage: settings.charsPerPage },
         pages:       parsed.pages
       };
 
-      // ── 7. Generate illustrations (blocking — user waits) ──
-      _sbGeneratePageImages(story)
-        .then(function() {
-
-          // ── 8. Save to Firebase + localStorage ──
-          _sbUpdateGenStatus('Saving story\u2026');
-
-          sbSaveStory(story)
-            .then(function() {
-              _sbGenerating = false;
-              _sbStopGenLoading();
-              sbShowToast('\u2736 Story generated!', 2800);
-              // Re-render only if the user is still on the story screen
-              if (typeof isStoryMode !== 'undefined' && isStoryMode) {
-                renderStoryScreen();
-              }
-            })
-            .catch(function(err) {
-              _sbShowGenError(
-                'Save failed: ' + (err && err.message ? err.message : String(err))
-              );
-            });
+      _sbGeneratePageImages(story).then(function() {
+        _sbUpdateGenStatus('Saving…');
+        sbSaveStory(story).then(function() {
+          _sbGenerating = false;
+          _sbStopGenLoading();
+          sbShowToast('✦ Story generated!', 2800);
+          if (typeof isStoryMode !== 'undefined' && isStoryMode) renderStoryScreen();
+        }).catch(function(err) {
+          _sbShowGenError('Save failed: ' + (err && err.message ? err.message : String(err)));
         });
+      });
     })
     .catch(function(err) {
       _sbShowGenError(err && err.message ? err.message : String(err));
     });
 }
 
-// ─── Public: Regenerate an existing story ────────────────────
-// Overwrites the story in-place (same ID → same card position in the UI).
-
+// ─── Regenerate ───────────────────────────────────────────────
 function sbRegenerateStory(storyId) {
   var story = _sbStories[storyId];
   if (!story) { sbShowToast('Story not found.', 2000); return; }
+  if (!confirm('Regenerate「' + (story.title || 'this story') + '」?\nThis will overwrite the current version.')) return;
 
-  if (!confirm(
-    'Regenerate \u300c' + (story.title || 'this story') + '\u300d?\n' +
-    'This will overwrite the current version.'
-  )) return;
+  var settings = Object.assign(
+    {},
+    _sbGenSettings,
+    story.settings || {},
+    { topic: story.topic || '', levelType: story.level || 'custom' }
+  );
 
-  // Re-use the original settings if available, otherwise fall back to current modal settings
-  var settings = (story.settings && story.settings.totalPages)
-    ? { totalPages: story.settings.totalPages, charsPerPage: story.settings.charsPerPage }
-    : Object.assign({}, _sbGenSettings);
+  // Prompt user to update topic
+  var newTopic = prompt('Story topic (leave blank to reuse previous):', story.topic || '');
+  if (newTopic === null) return; // cancelled
+  if (newTopic.trim()) settings.topic = newTopic.trim();
 
-  _sbRunGeneration(story.groupType, settings, storyId);
+  if (!settings.topic) { sbShowToast('A topic is required to generate.', 2000); return; }
+
+  _sbRunGeneration(story.level || 'custom', settings, storyId);
 }
 
 // ─── Keyboard shortcut ────────────────────────────────────────
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape') return;
-
-  // Close generate modal first if open
   var genModal = document.getElementById('sbGenModal');
-  if (genModal && genModal.classList.contains('active')) {
-    sbCloseGenModal();
-    return;
-  }
-
-  // Then exit story mode (isStoryMode defined in app.js, exists by call time)
-  if (typeof isStoryMode !== 'undefined' && isStoryMode) {
-    exitStoryMode();
-  }
+  if (genModal && genModal.classList.contains('active')) { sbCloseGenModal(); return; }
+  if (typeof isStoryMode !== 'undefined' && isStoryMode) exitStoryMode();
 });
 
-// ─── Public API (used by storyreader.js + Session B) ─────────
-// sbSaveStory(story)        → save/update a story
-// sbDeleteStory(storyId)    → delete a story
-// sbGetSentencesByRating()  → { again, hard, good }
-// sbShowToast(msg, ms)      → toast notification
-
 // ─── Nav button interceptors ──────────────────────────────────
-// When the user clicks Cards, List, or Review while story mode is active,
-// these capture-phase listeners run BEFORE ui.js's own handlers.
-// They silently deactivate story mode so that ui.js's handler and the
-// subsequent render() call see a clean non-story state.
 (function _sbWireNavExit() {
   var navIds = ['btnListView', 'btnCardView', 'btnReviewMode'];
   for (var n = 0; n < navIds.length; n++) {
@@ -1157,40 +801,26 @@ document.addEventListener('keydown', function(e) {
       if (!el) return;
       el.addEventListener('click', function() {
         if (typeof isStoryMode === 'undefined' || !isStoryMode) return;
-        // Deactivate story mode — do NOT call render(), ui.js will do it
         isStoryMode = false;
         var mainEl = document.querySelector('main');
         if (mainEl) mainEl.classList.remove('story-active');
-        var ss = document.getElementById('storyScreen');
+        var ss  = document.getElementById('storyScreen');
         if (ss) ss.style.display = 'none';
         var sbBtn = document.getElementById('btnStoryBuilder');
         if (sbBtn) sbBtn.classList.remove('active');
-      }, true); // capture phase — runs before ui.js bubble handlers
+      }, true);
     })(navIds[n]);
   }
 })();
 
 // ─── Init ─────────────────────────────────────────────────────
-// Restore persisted settings — must run at parse time (before DOM ready)
 (function _sbInit() {
-  try {
-    var rawAttrs = localStorage.getItem('jpStudy_sbCustomAttrs');
-    if (rawAttrs) {
-      var parsed = JSON.parse(rawAttrs);
-      // Merge conservatively — only known keys
-      if (typeof parsed.again === 'boolean') _sbCustomAttrs.again = parsed.again;
-      if (typeof parsed.hard  === 'boolean') _sbCustomAttrs.hard  = parsed.hard;
-      if (typeof parsed.good  === 'boolean') _sbCustomAttrs.good  = parsed.good;
-    }
-  } catch(e) {}
-
   try {
     var rawSettings = localStorage.getItem('jpStudy_sbGenSettings');
     if (rawSettings) {
       var ps = JSON.parse(rawSettings);
-      if (ps.totalPages   && ps.totalPages >= 1   && ps.totalPages <= 20)   _sbGenSettings.totalPages   = ps.totalPages;
-      if (ps.charsPerPage && ps.charsPerPage >= 60 && ps.charsPerPage <= 250) _sbGenSettings.charsPerPage = ps.charsPerPage;
-      if (ps.anchorPct   && ps.anchorPct   >= 10 && ps.anchorPct   <= 100)  _sbGenSettings.anchorPct   = ps.anchorPct;
+      if (ps.totalPages   >= 1   && ps.totalPages   <= 20)  _sbGenSettings.totalPages   = ps.totalPages;
+      if (ps.charsPerPage >= 60  && ps.charsPerPage <= 250) _sbGenSettings.charsPerPage = ps.charsPerPage;
     }
   } catch(e) {}
 })();
