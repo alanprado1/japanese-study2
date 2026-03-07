@@ -722,22 +722,32 @@ function _sbGeneratePageImages(story) {
   var pages = story.pages;
   var total = pages.length;
 
-  function doPage(idx) {
-    if (idx >= total) return Promise.resolve();
-
+  function makeKey(idx) {
     var descText = story.titleEn || story.title || '';
-    for (var i = 0; i < pages[idx].segments.length; i++) {
-      descText = pages[idx].segments[i].text.slice(0, 90);
-      break;
-    }
-    var synth = { id: story.id + '_p' + idx, en: descText, jp: descText };
-
-    return _sbFetchPageImage(synth).then(function(dataUrl) {
-      if (dataUrl && typeof _idbSet === 'function') _idbSet(synth.id, dataUrl);
-      return doPage(idx + 1);
-    });
+    var segs = pages[idx].segments || [];
+    if (segs.length) descText = segs[0].text.slice(0, 90);
+    return { id: story.id + '_p' + idx, en: descText, jp: descText };
   }
-  return doPage(0);
+
+  // Fetch page 0 immediately so it's ready when user opens the story
+  _sbFetchPageImage(makeKey(0)).then(function(dataUrl) {
+    if (dataUrl) {
+      if (typeof _idbSet    === 'function') _idbSet(makeKey(0).id, dataUrl);
+      if (typeof _imgCache  !== 'undefined') _imgCache[makeKey(0).id] = dataUrl;
+    }
+  });
+
+  // Fetch remaining pages with a 2s gap between each to avoid hammering
+  // the image API and to keep network bandwidth free for the user
+  for (var idx = 1; idx < total; idx++) {
+    (function(i) {
+      setTimeout(function() {
+        _sbFetchPageImage(makeKey(i)).then(function(dataUrl) {
+          if (dataUrl && typeof _idbSet === 'function') _idbSet(makeKey(i).id, dataUrl);
+        });
+      }, i * 2000);
+    })(idx);
+  }
 }
 
 // ─── Main generation ──────────────────────────────────────────

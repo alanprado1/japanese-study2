@@ -297,9 +297,9 @@ function _srRenderPage() {
 // Returns an array of cell objects:
 //   { text, dominant, anchorChars, fillerChars, anchorSegIds }
 //
-var _SR_TARGET_CHARS  = 20;   // ideal cell length → ~6 cells per 120-char page
-var _SR_MAX_CHARS     = 32;   // hard ceiling before forced break
-var _SR_MIN_SENTENCE  = 15;   // minimum chars before a sentence-end triggers a break
+var _SR_TARGET_CHARS  = 60;   // one full Japanese sentence (~60 chars)
+var _SR_MAX_CHARS     = 120;  // hard ceiling — roughly one prose segment
+var _SR_MIN_SENTENCE  = 30;   // minimum chars before sentence-end triggers break
 var _SR_SENTENCE_END  = { '。':1, '！':1, '？':1, '…':1 };
 var _SR_CLAUSE_BREAK  = { '、':1, '，':1 };
 
