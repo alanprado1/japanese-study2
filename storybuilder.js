@@ -724,7 +724,6 @@ function _sbGeneratePageImages(story) {
 
   function doPage(idx) {
     if (idx >= total) return Promise.resolve();
-    _sbUpdateGenStatus('Generating illustration ' + (idx + 1) + '\u00a0/\u00a0' + total + '\u2026');
 
     var descText = story.titleEn || story.title || '';
     for (var i = 0; i < pages[idx].segments.length; i++) {
@@ -734,13 +733,7 @@ function _sbGeneratePageImages(story) {
     var synth = { id: story.id + '_p' + idx, en: descText, jp: descText };
 
     return _sbFetchPageImage(synth).then(function(dataUrl) {
-      if (dataUrl) {
-        // Write to IDB for persistence across sessions
-        if (typeof _idbSet === 'function') _idbSet(synth.id, dataUrl);
-        // Populate in-memory cache so the reader finds page 0 instantly
-        // when opened right after generation — no async IDB lookup needed.
-        if (typeof _imgCache !== 'undefined') _imgCache[synth.id] = dataUrl;
-      }
+      if (dataUrl && typeof _idbSet === 'function') _idbSet(synth.id, dataUrl);
       return doPage(idx + 1);
     });
   }
@@ -773,16 +766,18 @@ function _sbRunGeneration(levelType, settings, existingStoryId) {
         pages:       parsed.pages
       };
 
-      _sbGeneratePageImages(story).then(function() {
-        _sbUpdateGenStatus('Saving…');
-        sbSaveStory(story).then(function() {
-          _sbGenerating = false;
-          _sbStopGenLoading();
-          sbShowToast('✦ Story generated!', 2800);
-          if (typeof isStoryMode !== 'undefined' && isStoryMode) renderStoryScreen();
-        }).catch(function(err) {
-          _sbShowGenError('Save failed: ' + (err && err.message ? err.message : String(err)));
-        });
+      _sbUpdateGenStatus('Saving…');
+      sbSaveStory(story).then(function() {
+        _sbGenerating = false;
+        _sbStopGenLoading();
+        sbShowToast('✦ Story generated!', 2800);
+        if (typeof isStoryMode !== 'undefined' && isStoryMode) renderStoryScreen();
+
+        // Generate page images silently in the background after the story
+        // is already visible — no waiting, no status updates.
+        _sbGeneratePageImages(story);
+      }).catch(function(err) {
+        _sbShowGenError('Save failed: ' + (err && err.message ? err.message : String(err)));
       });
     })
     .catch(function(err) {
