@@ -32,11 +32,27 @@ function applyViewState() {
 }
 
 // ─── themes ──────────────────────────────────────────────────
+var THEME_NAMES = {
+  'default':    'Totoro Forest',
+  'midnight':   'Midnight Blue',
+  'matcha':     'Matcha Green',
+  'ember':      'Ember Orange',
+  'light':      'Light Parchment',
+  'bathhouse':  'Bath House',
+  'laputa':     'Laputa Sky',
+  'mononoke':   'Mononoke Forest',
+  'howl':       "Howl's Castle",
+  'nausicaa':   'Nausicaä Spore',
+  'totoro-day': 'Totoro Day'
+};
+
 function setTheme(t) {
   document.body.setAttribute('data-theme', t);
   document.querySelectorAll('.theme-dot').forEach(function(d) {
     d.classList.toggle('active', d.dataset.t === t);
   });
+  var nameEl = document.getElementById('themeNameDisplay');
+  if (nameEl) nameEl.textContent = THEME_NAMES[t] || t;
   try { localStorage.setItem('jpStudy_theme', t); } catch(e) {}
 }
 
@@ -235,6 +251,10 @@ document.addEventListener('keydown', function(e) {
 function loadUIPrefs() {
   var t = localStorage.getItem('jpStudy_theme');
   if (t) setTheme(t);
+  else {
+    var nameEl = document.getElementById('themeNameDisplay');
+    if (nameEl) nameEl.textContent = THEME_NAMES['default'] || 'Totoro Forest';
+  }
 
   var f = localStorage.getItem('jpStudy_furigana');
   if (f === 'true') {
