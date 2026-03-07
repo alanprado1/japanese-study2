@@ -1,58 +1,52 @@
 /* ============================================================
-   積む — Japanese Study App  ·  Premium Redesign
+   積む — Japanese Study App  ·  Obsidian Gold Edition
    style.css
    ============================================================ */
 
-/* ===== CUSTOM FONT ===== */
-/*
-@font-face {
-  font-family: 'Kikai Chokoku JIS';
-  src: url('KikaiChokokujis.ttf') format('truetype');
-  font-weight: normal; font-style: normal;
-}
-*/
+/* ===== FONTS ===== */
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Noto+Sans+JP:wght@300;400;500&family=Noto+Serif+JP:wght@300;400;600&display=swap');
 
 /* ===== DESIGN TOKENS ===== */
 :root {
-  /* Palette */
-  --bg:          #0c0b10;
-  --bg2:         #131219;
-  --bg3:         #1a1924;
-  --bg4:         #201f2d;
-  --border:      #272535;
-  --border2:     #332f4a;
-  --accent:      #7c6af7;
-  --accent2:     #b89cf5;
-  --accent3:     #e8e0ff;
-  --accent-glow: rgba(124, 106, 247, 0.16);
-  --accent-glow2:rgba(124, 106, 247, 0.28);
-  --text:        #eceaf6;
-  --text2:       #9490a8;
-  --text3:       #5c5870;
-  --text4:       #3a3750;
-  --highlight:   rgba(124, 106, 247, 0.22);
-  --panel-bg:    #0f0e16;
-  --success:     #4ec882;
-  --warning:     #f0a84a;
-  --danger:      #e85555;
+  /* Obsidian Gold Palette */
+  --bg:          #0a0908;
+  --bg2:         #110f0d;
+  --bg3:         #181512;
+  --bg4:         #201c18;
+  --border:      #2a2520;
+  --border2:     #3d3628;
+  --accent:      #c9a96e;
+  --accent2:     #e2c98a;
+  --accent3:     #f5e9cc;
+  --accent-glow: rgba(201, 169, 110, 0.10);
+  --accent-glow2:rgba(201, 169, 110, 0.22);
+  --text:        #f0ebe2;
+  --text2:       #8a8070;
+  --text3:       #504840;
+  --text4:       #2e2820;
+  --highlight:   rgba(201, 169, 110, 0.14);
+  --panel-bg:    #0e0c0a;
+  --success:     #7ab87a;
+  --warning:     #d4954a;
+  --danger:      #c45858;
 
   /* Typography */
   --jp-size:    1.9rem;
   --sr-jp-size: 1.4rem;
   --jp-weight:  400;
 
-  /* Radius */
-  --r-sm:   8px;
-  --r-md:   12px;
-  --r-lg:   18px;
-  --r-xl:   24px;
+  /* Radius — sharper, more refined */
+  --r-sm:   6px;
+  --r-md:   10px;
+  --r-lg:   16px;
+  --r-xl:   20px;
 
   /* Shadows */
-  --shadow-sm:   0 2px 8px rgba(0,0,0,0.35);
-  --shadow-md:   0 6px 24px rgba(0,0,0,0.45);
-  --shadow-lg:   0 12px 48px rgba(0,0,0,0.55);
-  --shadow-card: 0 8px 48px rgba(0,0,0,0.6);
-  --shadow-glow: 0 0 0 1px var(--border), 0 0 32px rgba(124,106,247,0.10);
+  --shadow-sm:   0 1px 6px rgba(0,0,0,0.5);
+  --shadow-md:   0 4px 20px rgba(0,0,0,0.6);
+  --shadow-lg:   0 12px 48px rgba(0,0,0,0.7);
+  --shadow-card: 0 8px 40px rgba(0,0,0,0.65);
+  --shadow-glow: 0 0 0 1px rgba(201,169,110,0.20), 0 0 28px rgba(201,169,110,0.06);
 
   /* Layout */
   --sidebar-w: 220px;
@@ -67,82 +61,82 @@
 
 /* ===== ALTERNATE THEMES ===== */
 [data-theme="midnight"] {
-  --bg:          #070810;
-  --bg2:         #0d0f18;
-  --bg3:         #131622;
-  --bg4:         #191d2c;
-  --border:      #1e2234;
-  --border2:     #2a3050;
-  --accent:      #5e9cf7;
-  --accent2:     #93befa;
-  --accent3:     #d8eaff;
-  --accent-glow: rgba(94, 156, 247, 0.14);
-  --accent-glow2:rgba(94, 156, 247, 0.26);
-  --text:        #dde8ff;
-  --text2:       #7a8aaa;
-  --text3:       #424d65;
-  --text4:       #282f42;
-  --highlight:   rgba(94, 156, 247, 0.18);
-  --panel-bg:    #0a0c14;
+  --bg:          #07090f;
+  --bg2:         #0c0f1a;
+  --bg3:         #111623;
+  --bg4:         #171e2e;
+  --border:      #1c2438;
+  --border2:     #263050;
+  --accent:      #6b9fdc;
+  --accent2:     #96bfee;
+  --accent3:     #cfe0f8;
+  --accent-glow: rgba(107, 159, 220, 0.10);
+  --accent-glow2:rgba(107, 159, 220, 0.22);
+  --text:        #d8e6f8;
+  --text2:       #6878a0;
+  --text3:       #364060;
+  --text4:       #202840;
+  --highlight:   rgba(107, 159, 220, 0.14);
+  --panel-bg:    #08090e;
 }
 
 [data-theme="matcha"] {
-  --bg:          #080d0a;
-  --bg2:         #0e1610;
-  --bg3:         #141f17;
-  --bg4:         #192820;
-  --border:      #1e3024;
-  --border2:     #2a4835;
-  --accent:      #52b870;
-  --accent2:     #84d49e;
-  --accent3:     #c8f0d4;
-  --accent-glow: rgba(82, 184, 112, 0.14);
-  --accent-glow2:rgba(82, 184, 112, 0.26);
-  --text:        #ddf0e2;
-  --text2:       #6e9478;
-  --text3:       #395444;
-  --text4:       #223530;
-  --highlight:   rgba(82, 184, 112, 0.18);
-  --panel-bg:    #080d0a;
+  --bg:          #070a08;
+  --bg2:         #0c1210;
+  --bg3:         #111a15;
+  --bg4:         #16231b;
+  --border:      #1c2e22;
+  --border2:     #264535;
+  --accent:      #6aaf7c;
+  --accent2:     #95cf9e;
+  --accent3:     #c8edce;
+  --accent-glow: rgba(106, 175, 124, 0.10);
+  --accent-glow2:rgba(106, 175, 124, 0.22);
+  --text:        #d4edda;
+  --text2:       #5e8868;
+  --text3:       #334d3c;
+  --text4:       #1e3025;
+  --highlight:   rgba(106, 175, 124, 0.14);
+  --panel-bg:    #070a08;
 }
 
 [data-theme="ember"] {
-  --bg:          #0e0906;
-  --bg2:         #160d08;
-  --bg3:         #1e130c;
-  --bg4:         #261a12;
-  --border:      #301f12;
-  --border2:     #4a2f1a;
-  --accent:      #e0692a;
-  --accent2:     #f0a060;
-  --accent3:     #ffe0c4;
-  --accent-glow: rgba(224, 105, 42, 0.16);
-  --accent-glow2:rgba(224, 105, 42, 0.28);
-  --text:        #f5e8da;
-  --text2:       #a07858;
-  --text3:       #5a3e28;
-  --text4:       #3a2518;
-  --highlight:   rgba(224, 105, 42, 0.18);
-  --panel-bg:    #0c0806;
+  --bg:          #0a0705;
+  --bg2:         #140c08;
+  --bg3:         #1c120c;
+  --bg4:         #241810;
+  --border:      #2e1c10;
+  --border2:     #462a18;
+  --accent:      #d4732e;
+  --accent2:     #e89e60;
+  --accent3:     #f8d8b4;
+  --accent-glow: rgba(212, 115, 46, 0.12);
+  --accent-glow2:rgba(212, 115, 46, 0.24);
+  --text:        #f2e0cc;
+  --text2:       #9a7050;
+  --text3:       #583c24;
+  --text4:       #381e0e;
+  --highlight:   rgba(212, 115, 46, 0.14);
+  --panel-bg:    #080604;
 }
 
 [data-theme="light"] {
-  --bg:          #f2f1f8;
+  --bg:          #f8f5f0;
   --bg2:         #ffffff;
-  --bg3:         #ece9f6;
-  --bg4:         #e4e1f2;
-  --border:      #d6d2ea;
-  --border2:     #c0bad8;
-  --accent:      #6a55e0;
-  --accent2:     #9880f0;
-  --accent3:     #2d1fa0;
-  --accent-glow: rgba(106, 85, 224, 0.10);
-  --accent-glow2:rgba(106, 85, 224, 0.20);
-  --text:        #1a1830;
-  --text2:       #5c5880;
-  --text3:       #a8a4c0;
-  --text4:       #ccc8e0;
-  --highlight:   rgba(106, 85, 224, 0.12);
+  --bg3:         #ede8e0;
+  --bg4:         #e2dbd0;
+  --border:      #d8d0c0;
+  --border2:     #c0b8a8;
+  --accent:      #8b6a2e;
+  --accent2:     #b08844;
+  --accent3:     #6b4c1e;
+  --accent-glow: rgba(139, 106, 46, 0.08);
+  --accent-glow2:rgba(139, 106, 46, 0.18);
+  --text:        #1c1810;
+  --text2:       #5a5040;
+  --text3:       #a89878;
+  --text4:       #d0c8b8;
+  --highlight:   rgba(139, 106, 46, 0.10);
   --card-shadow: 0 4px 24px rgba(0,0,0,0.10);
   --shadow-card: 0 4px 24px rgba(0,0,0,0.10);
   --panel-bg:    #ffffff;
@@ -158,26 +152,30 @@ body {
   font-family: 'DM Mono', 'Noto Sans JP', monospace;
   background: var(--bg);
   color: var(--text);
+
   min-height: 100vh;
   transition: background 0.35s var(--ease), color 0.35s var(--ease);
   overflow-x: hidden;
 }
 
-/* Subtle noise grain */
+/* Fine grain texture — more subtle, warmer */
 body::after {
   content: '';
   position: fixed;
   inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
   pointer-events: none;
   z-index: 9999;
-  opacity: 0.6;
+  opacity: 0.45;
+  mix-blend-mode: overlay;
 }
 
 /* ===== APP SHELL ===== */
 .app {
   display: flex;
   min-height: 100vh;
+  /* Subtle warm ambient glow from center */
+  background-image: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(201,169,110,0.04) 0%, transparent 70%);
 }
 
 /* ===================================================
@@ -204,30 +202,32 @@ body::after {
 
 /* Logo area */
 .sidebar-logo {
-  padding: 28px 20px 22px;
+  padding: 26px 20px 20px;
   flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
 }
 
 .sidebar-logo-kanji {
-  font-family: 'Noto Serif JP', serif;
-  font-size: 1.65rem;
-  font-weight: 600;
+  font-family: 'Cormorant Garamond', 'Noto Serif JP', serif;
+  font-size: 1.85rem;
+  font-weight: 300;
+  font-style: italic;
   color: var(--accent);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   line-height: 1;
-  /* Subtle gradient on the kanji */
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+  background: linear-gradient(135deg, var(--accent2) 0%, var(--accent) 60%, #9a7a40 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .sidebar-logo-sub {
-  font-size: 0.58rem;
+  font-size: 0.52rem;
   color: var(--text3);
-  letter-spacing: 0.18em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  margin-top: 4px;
+  margin-top: 5px;
   font-family: 'DM Mono', monospace;
 }
 
@@ -249,15 +249,15 @@ body::after {
   display: flex;
   align-items: center;
   gap: 11px;
-  padding: 10px 12px;
+  padding: 9px 12px;
   border-radius: var(--r-sm);
   border: none;
   background: transparent;
   color: var(--text3);
   cursor: pointer;
   font-family: 'DM Mono', monospace;
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
   text-align: left;
   width: 100%;
   transition: background 0.15s var(--ease), color 0.15s var(--ease);
@@ -271,7 +271,7 @@ body::after {
 
 .sidebar-btn.active {
   background: var(--accent-glow);
-  color: var(--accent2);
+  color: var(--accent);
 }
 
 /* Left accent bar on active nav items */
@@ -281,10 +281,11 @@ body::after {
   left: 0;
   top: 50%;
   transform: translateY(-50%);
-  width: 2px;
-  height: 60%;
-  background: var(--accent);
+  width: 1.5px;
+  height: 55%;
+  background: linear-gradient(180deg, var(--accent2), var(--accent));
   border-radius: 0 2px 2px 0;
+  box-shadow: 0 0 6px var(--accent-glow2);
 }
 
 .sidebar-icon {
@@ -351,11 +352,11 @@ body::after {
 }
 .theme-dot:hover,
 .theme-dot.active             { border-color: var(--text2); transform: scale(1.25); }
-.theme-dot[data-t="default"]  { background: #7c6af7; }
-.theme-dot[data-t="midnight"] { background: #5e9cf7; }
-.theme-dot[data-t="matcha"]   { background: #52b870; }
-.theme-dot[data-t="ember"]    { background: #e0692a; }
-.theme-dot[data-t="light"]    { background: #e2e0f5; border: 2px solid #aaa8c8; }
+.theme-dot[data-t="default"]  { background: #c9a96e; }
+.theme-dot[data-t="midnight"] { background: #6b9fdc; }
+.theme-dot[data-t="matcha"]   { background: #6aaf7c; }
+.theme-dot[data-t="ember"]    { background: #d4732e; }
+.theme-dot[data-t="light"]    { background: #ede8e0; border: 2px solid #b0a890; }
 
 /* Mobile sidebar overlay */
 .sidebar-overlay {
@@ -400,6 +401,7 @@ body::after {
   top: 0;
   z-index: 100;
   flex-shrink: 0;
+  box-shadow: 0 1px 0 var(--border), inset 0 1px 0 rgba(201,169,110,0.04);
 }
 
 /* Hamburger — hidden on desktop, shown on mobile */
@@ -460,6 +462,7 @@ body::after {
   background: linear-gradient(90deg, var(--accent) 0%, var(--accent2) 100%);
   border-radius: 2px;
   transition: width 0.5s var(--ease);
+  box-shadow: 0 0 6px rgba(201,169,110,0.3);
 }
 
 /* ===================================================
@@ -609,21 +612,38 @@ main {
   text-align: center;
   transition: box-shadow 0.3s var(--ease);
   animation: fadeSlide 0.3s var(--ease);
-  /* Subtle inner glow on the card */
-  outline: 1px solid transparent;
+  overflow: hidden;
 }
 
+/* Diagonal gold sheen */
 .card::before {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: var(--r-xl);
-  background: linear-gradient(160deg, rgba(124,106,247,0.04) 0%, transparent 60%);
+  background: linear-gradient(
+    135deg,
+    rgba(201,169,110,0.04) 0%,
+    transparent 40%,
+    rgba(201,169,110,0.02) 100%
+  );
+  pointer-events: none;
+}
+
+/* Thin top highlight line */
+.card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 10%; right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,169,110,0.25), transparent);
+  border-radius: 1px;
   pointer-events: none;
 }
 
 .card:hover {
   box-shadow: var(--shadow-glow);
+  border-color: var(--border2);
 }
 
 /* JP area — top of card */
@@ -646,20 +666,22 @@ main {
 
 /* ===== JAPANESE TEXT ===== */
 .jp-sentence {
-  font-family: 'Kikai Chokoku JIS', 'Noto Sans JP', 'Noto Serif JP', serif;
+  font-family: 'Kikai Chokoku JIS', 'Noto Serif JP', serif;
   font-size: var(--jp-size);
   font-weight: var(--jp-weight);
-  line-height: 1.85;
+  line-height: 1.9;
   color: var(--text);
   cursor: pointer;
   user-select: none;
   transition: color 0.2s, font-size 0.2s;
+  letter-spacing: 0.04em;
 }
 .jp-sentence ruby rt {
   font-family: 'Noto Sans JP', sans-serif;
-  font-size: 0.44em;
-  color: var(--accent2);
+  font-size: 0.42em;
+  color: var(--accent);
   font-weight: 300;
+  opacity: 0.8;
 }
 
 .jp-word {
@@ -897,7 +919,7 @@ main {
   left: 0;
   top: 0;
   bottom: 0;
-  width: 3px;
+  width: 2px;
   background: var(--border);
   border-radius: var(--r-md) 0 0 var(--r-md);
   transition: background 0.18s;
@@ -985,8 +1007,10 @@ main {
   gap: 16px;
 }
 .empty-state .kanji {
-  font-family: 'Noto Serif JP', serif;
+  font-family: 'Cormorant Garamond', 'Noto Serif JP', serif;
   font-size: 5rem;
+  font-weight: 300;
+  font-style: italic;
   color: var(--border2);
   line-height: 1;
 }
@@ -1020,7 +1044,7 @@ main {
   padding: 32px;
   max-width: 480px;
   width: 90%;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(201,169,110,0.08);
   animation: popIn 0.22s cubic-bezier(.34, 1.56, .64, 1);
   position: relative;
   max-height: 80vh;
@@ -1042,14 +1066,17 @@ main {
 .popup-close:hover { color: var(--text); }
 
 .popup-word {
-  font-family: 'Kikai Chokoku JIS', 'Noto Sans JP', serif;
-  font-size: 2.2rem;
+  font-family: 'Cormorant Garamond', 'Noto Serif JP', serif;
+  font-size: 2.6rem;
+  font-weight: 300;
+  font-style: italic;
   color: var(--accent);
   margin-bottom: 4px;
-  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  background: linear-gradient(135deg, var(--accent2), var(--accent), #9a7a40);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  letter-spacing: 0.06em;
 }
 .popup-reading {
   font-family: 'DM Mono', monospace;
@@ -1130,11 +1157,13 @@ main {
 }
 
 .modal h2 {
-  font-family: 'Playfair Display', serif;
-  font-size: 1.5rem;
+  font-family: 'Cormorant Garamond', 'Noto Serif JP', serif;
+  font-size: 1.6rem;
+  font-weight: 300;
+  font-style: italic;
   margin-bottom: 5px;
   color: var(--text);
-  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 .modal-sub {
   font-family: 'DM Mono', monospace;
@@ -1356,11 +1385,14 @@ main.story-active > #lengthFilterBar {
 .sb-screen-header .btn { flex-shrink: 0; margin-top: 2px; }
 
 .sb-screen-title-main {
-  font-family: 'Playfair Display', serif;
-  font-size: 1.3rem;
+  font-family: 'Cormorant Garamond', 'Noto Serif JP', serif;
+  font-size: 1.4rem;
+  font-weight: 300;
+  font-style: italic;
   color: var(--text);
   margin-bottom: 3px;
   line-height: 1.2;
+  letter-spacing: 0.04em;
 }
 .sb-screen-title-sub {
   font-family: 'DM Mono', monospace;
@@ -1656,8 +1688,10 @@ main.story-active > #lengthFilterBar {
   gap: 12px;
 }
 .sb-empty-kanji {
-  font-family: 'Noto Serif JP', serif;
-  font-size: 3.6rem;
+  font-family: 'Cormorant Garamond', 'Noto Serif JP', serif;
+  font-size: 3.8rem;
+  font-weight: 300;
+  font-style: italic;
   color: var(--border);
   line-height: 1;
   margin-bottom: 4px;
@@ -1740,9 +1774,10 @@ main.story-active > #lengthFilterBar {
   min-height: 200px;
 }
 .sb-gen-kanji {
-  font-family: 'Noto Serif JP', serif;
+  font-family: 'Cormorant Garamond', 'Noto Serif JP', serif;
   font-size: 5rem;
   font-weight: 300;
+  font-style: italic;
   color: var(--accent);
   display: inline-block;
   line-height: 1;
@@ -1922,12 +1957,14 @@ main.story-active > #lengthFilterBar {
   pointer-events: none;
 }
 .sr-title-ja {
-  font-family: 'Noto Serif JP', serif;
-  font-size: 1.35rem;
-  font-weight: 600;
+  font-family: 'Cormorant Garamond', 'Noto Serif JP', serif;
+  font-size: 1.5rem;
+  font-weight: 300;
+  font-style: italic;
   color: var(--text);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   line-height: 1.4;
+  text-shadow: 0 1px 8px rgba(0,0,0,0.6);
 }
 .sr-title-en {
   font-family: 'DM Mono', monospace;
