@@ -4,7 +4,7 @@
    ============================================================ */
 
 /* ===== FONTS ===== */
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Noto+Sans+JP:wght@300;400;500&family=Noto+Serif+JP:wght@300;400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Noto+Sans+JP:wght@300;400;500&family=Noto+Serif+JP:wght@300;400;600&family=Cinzel:wght@400;500;600&family=Lora:ital,wght@0,400;0,600;1,400&display=swap');
 
 /* ===== KEYFRAME ANIMATIONS ===== */
 
@@ -76,7 +76,52 @@
   to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
 }
 
-/* ===== DESIGN TOKENS ===== */
+/* Leaf drift — Ghibli nature ambient */
+@keyframes leafDrift {
+  0%   { transform: translateY(0) rotate(0deg) translateX(0); opacity: 0; }
+  10%  { opacity: 0.6; }
+  90%  { opacity: 0.4; }
+  100% { transform: translateY(-120vh) rotate(720deg) translateX(60px); opacity: 0; }
+}
+
+/* Firefly float */
+@keyframes fireflyFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.15; }
+  25%       { transform: translate(8px, -12px) scale(1.2); opacity: 0.7; }
+  50%       { transform: translate(-5px, -6px) scale(0.9); opacity: 0.4; }
+  75%       { transform: translate(12px, -18px) scale(1.1); opacity: 0.8; }
+}
+
+/* Mist roll — gentle horizontal drift */
+@keyframes mistRoll {
+  0%   { transform: translateX(-8%) scaleY(1); opacity: 0.3; }
+  50%  { transform: translateX(4%) scaleY(1.04); opacity: 0.18; }
+  100% { transform: translateX(-8%) scaleY(1); opacity: 0.3; }
+}
+
+/* Ink blot entrance for cards */
+@keyframes inkBlot {
+  from { clip-path: circle(0% at 50% 50%); opacity: 0; }
+  to   { clip-path: circle(150% at 50% 50%); opacity: 1; }
+}
+
+/* Brush stroke reveal */
+@keyframes brushReveal {
+  from { transform: scaleX(0); transform-origin: left; }
+  to   { transform: scaleX(1); transform-origin: left; }
+}
+
+/* Wind sway for decorative elements */
+@keyframes windSway {
+  0%, 100% { transform: rotate(-1.5deg) translateX(0); }
+  50%       { transform: rotate(1.5deg) translateX(3px); }
+}
+
+/* Ripple out */
+@keyframes rippleOut {
+  0%   { transform: scale(0); opacity: 0.6; }
+  100% { transform: scale(3.5); opacity: 0; }
+}
 @property --border-angle {
   syntax: '<angle>';
   initial-value: 0deg;
@@ -84,77 +129,245 @@
 }
 
 :root {
-  /* Core palette — deep obsidian with gold */
-  --bg:    #080706;
-  --bg2:   #0f0d0b;
-  --bg3:   #171310;
-  --bg4:   #201b17;
-  --border:  #2c2420;
-  --border2: #42362c;
+  /* ── THEME: Totoro Forest (default) — deep moss night, firefly gold ── */
+  --bg:    #070a06;
+  --bg2:   #0c1009;
+  --bg3:   #121710;
+  --bg4:   #192014;
+  --border:  #253020;
+  --border2: #3a4c30;
 
-  /* Gold accent system */
+  /* Warm gold-leaf accent */
   --accent:  #c8a86c;
   --accent2: #e4cc88;
   --accent3: #f6eecc;
-  --ar: 200, 168, 108;  /* accent as raw RGB for rgba() */
+  --ar: 200, 168, 108;
 
   --accent-glow:  rgba(200, 168, 108, 0.10);
   --accent-glow2: rgba(200, 168, 108, 0.24);
   --accent-glow3: rgba(200, 168, 108, 0.42);
 
-  --text:  #f0e8dc;
-  --text2: #8c7d6a;
-  --text3: #524438;
-  --text4: #302418;
+  --text:  #edeae0;
+  --text2: #8a8c72;
+  --text3: #4e5038;
+  --text4: #2c2e1c;
 
   --highlight:  rgba(200, 168, 108, 0.16);
-  --panel-bg:   #0c0a08;
+  --panel-bg:   #090c08;
 
   --success: #72b472;
   --warning: #c88c40;
   --danger:  #c04848;
 
-  /* Danger/success/warning raw for rgba */
   --dr: 192, 72, 72;
   --sr: 114, 180, 114;
   --wr: 200, 140, 64;
+
+  /* Ghibli ambient — faint forest mist bg overlay */
+  --ghibli-bg-overlay: radial-gradient(ellipse 120% 60% at 60% 0%, rgba(80,120,60,0.07) 0%, transparent 60%),
+                        radial-gradient(ellipse 60% 40% at 5% 95%, rgba(60,100,40,0.05) 0%, transparent 55%);
+  /* Texture tint for cards */
+  --card-tint: rgba(40,60,28,0.18);
 
   /* Typography */
   --jp-size:    1.9rem;
   --sr-jp-size: 1.4rem;
   --jp-weight:  400;
 
-  /* Radius */
-  --r-xs:  4px;
-  --r-sm:  7px;
-  --r-md:  12px;
-  --r-lg:  18px;
-  --r-xl:  24px;
-  --r-2xl: 32px;
+  /* Radius — slightly rounder for Ghibli softness */
+  --r-xs:  5px;
+  --r-sm:  9px;
+  --r-md:  14px;
+  --r-lg:  20px;
+  --r-xl:  26px;
+  --r-2xl: 36px;
 
-  /* Layout */
   --sidebar-w: 220px;
   --topbar-h:  54px;
 
-  /* Easing */
   --ease:      cubic-bezier(0.4, 0, 0.2, 1);
   --ease-out:  cubic-bezier(0, 0, 0.2, 1);
   --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
 
-  /* Shadows */
-  --shadow-sm:    0 2px 10px rgba(0,0,0,0.55);
+  --shadow-sm:    0 2px 12px rgba(0,0,0,0.55);
   --shadow-md:    0 6px 28px rgba(0,0,0,0.65);
   --shadow-lg:    0 16px 60px rgba(0,0,0,0.75);
-  --shadow-card:  0 0 0 1px rgba(255,255,255,0.04),
-                  0 2px 6px rgba(0,0,0,0.4),
-                  0 12px 40px rgba(0,0,0,0.65);
-  --shadow-glow:  0 0 0 1px rgba(var(--ar), 0.25),
-                  0 0 32px rgba(var(--ar), 0.10),
-                  0 12px 40px rgba(0,0,0,0.65);
+  --shadow-card:  0 0 0 1px rgba(255,255,255,0.045),
+                  0 2px 8px rgba(0,0,0,0.42),
+                  0 14px 44px rgba(0,0,0,0.60);
+  --shadow-glow:  0 0 0 1px rgba(var(--ar), 0.28),
+                  0 0 36px rgba(var(--ar), 0.12),
+                  0 14px 44px rgba(0,0,0,0.60);
   --card-shadow:  var(--shadow-card);
 }
 
 /* ===== ALTERNATE THEMES ===== */
+
+/* ── Spirited Away: Bath House — deep indigo steam & lantern coral ── */
+[data-theme="bathhouse"] {
+  --bg:    #07070f;
+  --bg2:   #0d0d1c;
+  --bg3:   #121228;
+  --bg4:   #181830;
+  --border:  #20204a;
+  --border2: #2e2e68;
+  --accent:  #e07858;
+  --accent2: #f4a880;
+  --accent3: #ffd8c0;
+  --ar: 224, 120, 88;
+  --accent-glow:  rgba(224, 120, 88, 0.10);
+  --accent-glow2: rgba(224, 120, 88, 0.26);
+  --accent-glow3: rgba(224, 120, 88, 0.44);
+  --text:  #ece8f8;
+  --text2: #7068a0;
+  --text3: #3c3860;
+  --text4: #201e40;
+  --highlight: rgba(224, 120, 88, 0.14);
+  --panel-bg: #060610;
+  --ghibli-bg-overlay: radial-gradient(ellipse 100% 55% at 40% 0%, rgba(80,60,160,0.12) 0%, transparent 60%),
+                        radial-gradient(ellipse 60% 40% at 90% 80%, rgba(224,120,88,0.07) 0%, transparent 55%);
+  --card-tint: rgba(40,36,80,0.20);
+  --shadow-glow: 0 0 0 1px rgba(224,120,88,0.28), 0 0 36px rgba(224,120,88,0.12), 0 14px 44px rgba(0,0,0,0.65);
+}
+
+/* ── Castle in the Sky — dusty lavender, ancient brass ── */
+[data-theme="laputa"] {
+  --bg:    #080810;
+  --bg2:   #0e0e1a;
+  --bg3:   #141426;
+  --bg4:   #1c1c30;
+  --border:  #282844;
+  --border2: #3c3c64;
+  --accent:  #b8a460;
+  --accent2: #d8c880;
+  --accent3: #f0e8c0;
+  --ar: 184, 164, 96;
+  --accent-glow:  rgba(184, 164, 96, 0.10);
+  --accent-glow2: rgba(184, 164, 96, 0.24);
+  --accent-glow3: rgba(184, 164, 96, 0.42);
+  --text:  #e8e0f4;
+  --text2: #7870a8;
+  --text3: #404070;
+  --text4: #242450;
+  --highlight: rgba(184, 164, 96, 0.14);
+  --panel-bg: #06060e;
+  --ghibli-bg-overlay: radial-gradient(ellipse 110% 50% at 50% 0%, rgba(100,90,180,0.10) 0%, transparent 55%),
+                        radial-gradient(ellipse 50% 35% at 10% 90%, rgba(80,70,140,0.07) 0%, transparent 50%);
+  --card-tint: rgba(50,44,90,0.18);
+  --shadow-glow: 0 0 0 1px rgba(184,164,96,0.28), 0 0 36px rgba(184,164,96,0.10), 0 14px 44px rgba(0,0,0,0.65);
+}
+
+/* ── Princess Mononoke — bloodstone red, bone white, dark earth ── */
+[data-theme="mononoke"] {
+  --bg:    #0a0604;
+  --bg2:   #140a06;
+  --bg3:   #1e0e08;
+  --bg4:   #28140c;
+  --border:  #3c1810;
+  --border2: #5a2818;
+  --accent:  #cc4444;
+  --accent2: #e87060;
+  --accent3: #f8c0b0;
+  --ar: 204, 68, 68;
+  --accent-glow:  rgba(204, 68, 68, 0.12);
+  --accent-glow2: rgba(204, 68, 68, 0.28);
+  --accent-glow3: rgba(204, 68, 68, 0.46);
+  --text:  #f0e8e0;
+  --text2: #8c6858;
+  --text3: #583c30;
+  --text4: #341e18;
+  --highlight: rgba(204, 68, 68, 0.14);
+  --panel-bg: #080504;
+  --ghibli-bg-overlay: radial-gradient(ellipse 100% 55% at 55% 0%, rgba(120,30,20,0.10) 0%, transparent 60%),
+                        radial-gradient(ellipse 55% 35% at 0% 100%, rgba(80,20,10,0.06) 0%, transparent 50%);
+  --card-tint: rgba(60,20,14,0.22);
+  --shadow-glow: 0 0 0 1px rgba(204,68,68,0.28), 0 0 36px rgba(204,68,68,0.12), 0 14px 44px rgba(0,0,0,0.65);
+}
+
+/* ── Howl's Moving Castle — teal clockwork & amber steam ── */
+[data-theme="howl"] {
+  --bg:    #060b0d;
+  --bg2:   #0a1318;
+  --bg3:   #0e1c24;
+  --bg4:   #142430;
+  --border:  #1c3444;
+  --border2: #2c4e66;
+  --accent:  #4cb8b4;
+  --accent2: #72d8d4;
+  --accent3: #b0f0ee;
+  --ar: 76, 184, 180;
+  --accent-glow:  rgba(76, 184, 180, 0.10);
+  --accent-glow2: rgba(76, 184, 180, 0.26);
+  --accent-glow3: rgba(76, 184, 180, 0.44);
+  --text:  #d4eef0;
+  --text2: #4c8898;
+  --text3: #285268;
+  --text4: #143244;
+  --highlight: rgba(76, 184, 180, 0.14);
+  --panel-bg: #050a0c;
+  --ghibli-bg-overlay: radial-gradient(ellipse 110% 55% at 45% 0%, rgba(40,130,140,0.10) 0%, transparent 60%),
+                        radial-gradient(ellipse 55% 35% at 95% 90%, rgba(200,120,40,0.07) 0%, transparent 50%);
+  --card-tint: rgba(20,60,70,0.20);
+  --shadow-glow: 0 0 0 1px rgba(76,184,180,0.28), 0 0 36px rgba(76,184,180,0.12), 0 14px 44px rgba(0,0,0,0.65);
+}
+
+/* ── Nausicaä — poisonous violet spore & golden wind ── */
+[data-theme="nausicaa"] {
+  --bg:    #080510;
+  --bg2:   #0f0a1e;
+  --bg3:   #140e2a;
+  --bg4:   #1c1438;
+  --border:  #281e50;
+  --border2: #3e2e78;
+  --accent:  #b07cd0;
+  --accent2: #cc9eec;
+  --accent3: #ecd8ff;
+  --ar: 176, 124, 208;
+  --accent-glow:  rgba(176, 124, 208, 0.10);
+  --accent-glow2: rgba(176, 124, 208, 0.26);
+  --accent-glow3: rgba(176, 124, 208, 0.44);
+  --text:  #e8dcf8;
+  --text2: #806898;
+  --text3: #4c3a60;
+  --text4: #2c1e40;
+  --highlight: rgba(176, 124, 208, 0.14);
+  --panel-bg: #060408;
+  --ghibli-bg-overlay: radial-gradient(ellipse 110% 55% at 50% 5%, rgba(120,70,180,0.10) 0%, transparent 60%),
+                        radial-gradient(ellipse 50% 35% at 5% 90%, rgba(80,40,130,0.07) 0%, transparent 55%);
+  --card-tint: rgba(50,24,80,0.20);
+  --shadow-glow: 0 0 0 1px rgba(176,124,208,0.28), 0 0 36px rgba(176,124,208,0.12), 0 14px 44px rgba(0,0,0,0.65);
+}
+
+/* ── My Neighbor Totoro — sky blue day, acorn cream ── */
+[data-theme="totoro-day"] {
+  --bg:    #eef4f8;
+  --bg2:   #fafcff;
+  --bg3:   #e4eef4;
+  --bg4:   #d8e8f0;
+  --border:  #c0d4e4;
+  --border2: #a8c4d8;
+  --accent:  #2a7fa8;
+  --accent2: #4aa4cc;
+  --accent3: #1a5070;
+  --ar: 42, 127, 168;
+  --accent-glow:  rgba(42, 127, 168, 0.08);
+  --accent-glow2: rgba(42, 127, 168, 0.20);
+  --accent-glow3: rgba(42, 127, 168, 0.38);
+  --text:  #1a2c38;
+  --text2: #4a6878;
+  --text3: #8aaab8;
+  --text4: #c4d8e4;
+  --highlight: rgba(42, 127, 168, 0.12);
+  --panel-bg: #fafcff;
+  --ghibli-bg-overlay: radial-gradient(ellipse 120% 55% at 50% 0%, rgba(140,200,240,0.18) 0%, transparent 55%),
+                        radial-gradient(ellipse 60% 40% at 5% 95%, rgba(100,180,120,0.08) 0%, transparent 50%);
+  --card-tint: rgba(180,220,240,0.15);
+  --shadow-card: 0 0 0 1px rgba(0,0,0,0.05), 0 4px 24px rgba(0,60,100,0.10);
+  --card-shadow: var(--shadow-card);
+  --shadow-glow: 0 0 0 1px rgba(42,127,168,0.22), 0 0 24px rgba(42,127,168,0.08), 0 8px 28px rgba(0,0,0,0.10);
+}
+
+/* Keep legacy themes */
 [data-theme="midnight"] {
   --bg:    #060810;
   --bg2:   #0b0e1c;
@@ -175,6 +388,9 @@
   --text4: #1c2840;
   --highlight: rgba(110, 164, 220, 0.14);
   --panel-bg: #080910;
+  --ghibli-bg-overlay: radial-gradient(ellipse 100% 55% at 50% 0%, rgba(60,80,160,0.10) 0%, transparent 60%),
+                        radial-gradient(ellipse 50% 35% at 5% 90%, rgba(40,60,130,0.06) 0%, transparent 55%);
+  --card-tint: rgba(20,30,70,0.18);
   --shadow-glow: 0 0 0 1px rgba(110,164,220,0.25), 0 0 32px rgba(110,164,220,0.10), 0 12px 40px rgba(0,0,0,0.65);
 }
 
@@ -198,6 +414,9 @@
   --text4: #1a3024;
   --highlight: rgba(102, 176, 124, 0.14);
   --panel-bg: #060a08;
+  --ghibli-bg-overlay: radial-gradient(ellipse 110% 55% at 55% 0%, rgba(60,120,70,0.09) 0%, transparent 60%),
+                        radial-gradient(ellipse 50% 35% at 0% 95%, rgba(40,90,50,0.05) 0%, transparent 55%);
+  --card-tint: rgba(24,50,30,0.18);
   --shadow-glow: 0 0 0 1px rgba(102,176,124,0.25), 0 0 32px rgba(102,176,124,0.10), 0 12px 40px rgba(0,0,0,0.65);
 }
 
@@ -221,6 +440,9 @@
   --text4: #342010;
   --highlight: rgba(208, 108, 44, 0.16);
   --panel-bg: #080604;
+  --ghibli-bg-overlay: radial-gradient(ellipse 100% 55% at 55% 0%, rgba(140,60,20,0.10) 0%, transparent 60%),
+                        radial-gradient(ellipse 50% 35% at 0% 100%, rgba(100,40,10,0.06) 0%, transparent 55%);
+  --card-tint: rgba(60,26,10,0.20);
   --shadow-glow: 0 0 0 1px rgba(208,108,44,0.25), 0 0 32px rgba(208,108,44,0.12), 0 12px 40px rgba(0,0,0,0.65);
 }
 
@@ -244,6 +466,9 @@
   --text4: #ccc0a8;
   --highlight: rgba(140, 104, 40, 0.12);
   --panel-bg: #fdfaf5;
+  --ghibli-bg-overlay: radial-gradient(ellipse 120% 55% at 55% 0%, rgba(180,150,60,0.06) 0%, transparent 55%),
+                        radial-gradient(ellipse 55% 35% at 0% 100%, rgba(120,100,40,0.04) 0%, transparent 50%);
+  --card-tint: rgba(200,180,140,0.08);
   --shadow-card: 0 0 0 1px rgba(0,0,0,0.06), 0 4px 28px rgba(0,0,0,0.12);
   --card-shadow: var(--shadow-card);
   --shadow-glow: 0 0 0 1px rgba(140,104,40,0.2), 0 0 24px rgba(140,104,40,0.08), 0 8px 28px rgba(0,0,0,0.1);
@@ -280,10 +505,24 @@ body::after {
 .app {
   display: flex;
   min-height: 100vh;
-  /* Radial ambient gold glow top-center + bottom-left */
-  background-image:
+  background-image: var(--ghibli-bg-overlay,
     radial-gradient(ellipse 100% 55% at 55% 0%, rgba(var(--ar), 0.055) 0%, transparent 65%),
-    radial-gradient(ellipse 50% 35% at 0% 100%, rgba(var(--ar), 0.025) 0%, transparent 55%);
+    radial-gradient(ellipse 50% 35% at 0% 100%, rgba(var(--ar), 0.025) 0%, transparent 55%)
+  );
+}
+
+/* ── Ghibli ambient mist layer ── */
+.app::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 80% 30% at 20% 85%, rgba(var(--ar), 0.025) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 20% at 80% 10%, rgba(var(--ar), 0.020) 0%, transparent 55%);
+  animation: mistRoll 18s ease-in-out infinite;
+  opacity: 0.7;
 }
 
 /* ===================================================
@@ -354,11 +593,10 @@ body::after {
 }
 
 .sidebar-logo-kanji {
-  font-family: 'Cormorant Garamond', 'Noto Serif JP', serif;
+  font-family: 'Cinzel', 'Cormorant Garamond', 'Noto Serif JP', serif;
   font-size: 2.1rem;
-  font-weight: 300;
-  font-style: italic;
-  letter-spacing: 0.08em;
+  font-weight: 400;
+  letter-spacing: 0.10em;
   line-height: 1;
   /* Animated shimmer gradient on the logo text */
   background: linear-gradient(
@@ -366,7 +604,7 @@ body::after {
     var(--accent3) 0%,
     var(--accent2) 20%,
     var(--accent)  40%,
-    #7a5820       55%,
+    color-mix(in srgb, var(--accent) 55%, black) 55%,
     var(--accent)  70%,
     var(--accent2) 85%,
     var(--accent3) 100%
@@ -376,7 +614,7 @@ body::after {
   -webkit-text-fill-color: transparent;
   background-clip: text;
   animation: logoShimmer 5s linear infinite;
-  filter: drop-shadow(0 0 14px rgba(var(--ar), 0.35));
+  filter: drop-shadow(0 0 14px rgba(var(--ar), 0.38));
 }
 
 .sidebar-logo-sub {
@@ -510,15 +748,39 @@ body::after {
 
 .sidebar-bottom { margin-top: auto; padding-bottom: 18px; flex-shrink: 0; }
 
+/* Ghibli theme section label */
+.sidebar-theme-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.48rem;
+  color: var(--text3);
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  padding: 6px 16px 2px;
+}
+
+/* Theme name display — shows on hover/active */
+.sidebar-theme-name {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 0.66rem;
+  font-style: italic;
+  color: var(--accent);
+  padding: 0 16px 6px;
+  letter-spacing: 0.07em;
+  opacity: 0.7;
+  transition: opacity 0.3s;
+  min-height: 1.1em;
+}
+
 /* Theme dots */
 .sidebar-themes {
   display: flex;
-  gap: 8px;
-  padding: 10px 16px 4px;
+  gap: 7px;
+  padding: 10px 14px 4px;
   align-items: center;
+  flex-wrap: wrap;
 }
 .theme-dot {
-  width: 13px; height: 13px;
+  width: 14px; height: 14px;
   border-radius: 50%;
   cursor: pointer;
   border: 2px solid transparent;
@@ -529,14 +791,22 @@ body::after {
 .theme-dot:hover,
 .theme-dot.active {
   border-color: var(--text2);
-  transform: scale(1.35);
+  transform: scale(1.4);
   box-shadow: 0 0 10px currentColor;
 }
-.theme-dot[data-t="default"]  { background: #c8a86c; color: #c8a86c; }
-.theme-dot[data-t="midnight"] { background: #6ea4dc; color: #6ea4dc; }
-.theme-dot[data-t="matcha"]   { background: #66b07c; color: #66b07c; }
-.theme-dot[data-t="ember"]    { background: #d06c2c; color: #d06c2c; }
-.theme-dot[data-t="light"]    { background: #e8e0d0; color: #b0a880; border: 2px solid #b0a880; }
+/* Original themes */
+.theme-dot[data-t="default"]    { background: #c8a86c; color: #c8a86c; }
+.theme-dot[data-t="midnight"]   { background: #6ea4dc; color: #6ea4dc; }
+.theme-dot[data-t="matcha"]     { background: #66b07c; color: #66b07c; }
+.theme-dot[data-t="ember"]      { background: #d06c2c; color: #d06c2c; }
+.theme-dot[data-t="light"]      { background: #e8e0d0; color: #b0a880; border: 2px solid #b0a880; }
+/* Ghibli themes */
+.theme-dot[data-t="bathhouse"]  { background: #e07858; color: #e07858; }
+.theme-dot[data-t="laputa"]     { background: #b8a460; color: #b8a460; }
+.theme-dot[data-t="mononoke"]   { background: #cc4444; color: #cc4444; }
+.theme-dot[data-t="howl"]       { background: #4cb8b4; color: #4cb8b4; }
+.theme-dot[data-t="nausicaa"]   { background: #b07cd0; color: #b07cd0; }
+.theme-dot[data-t="totoro-day"] { background: #4aa4cc; color: #4aa4cc; }
 
 /* Mobile overlay */
 .sidebar-overlay {
@@ -781,19 +1051,38 @@ main {
 }
 
 .btn-accent {
-  background: linear-gradient(135deg, var(--accent2) 0%, var(--accent) 60%, #8a6030 100%);
+  background: linear-gradient(135deg, var(--accent2) 0%, var(--accent) 60%, color-mix(in srgb, var(--accent) 70%, black) 100%);
   color: var(--bg);
   border-color: var(--accent);
   font-weight: 500;
   box-shadow: 0 2px 18px rgba(var(--ar), 0.35),
-              inset 0 1px 0 rgba(255,255,255,0.2);
+              inset 0 1px 0 rgba(255,255,255,0.22),
+              inset 0 -1px 0 rgba(0,0,0,0.15);
+  letter-spacing: 0.11em;
 }
 .btn-accent:hover {
   box-shadow: 0 4px 28px rgba(var(--ar), 0.55),
-              inset 0 1px 0 rgba(255,255,255,0.25);
+              inset 0 1px 0 rgba(255,255,255,0.28);
   transform: translateY(-2px);
   color: var(--bg);
   background: linear-gradient(135deg, var(--accent3) 0%, var(--accent2) 50%, var(--accent) 100%);
+}
+
+/* Ripple effect on btn-accent click */
+.btn-accent::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 100%; padding-top: 100%;
+  margin-top: -50%; margin-left: -50%;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.18);
+  transform: scale(0);
+  opacity: 0;
+  pointer-events: none;
+}
+.btn-accent:active::after {
+  animation: rippleOut 0.5s var(--ease-out) forwards;
 }
 
 .btn-nav {
@@ -844,13 +1133,14 @@ main {
   align-items: center; gap: 0;
   text-align: center;
   animation: fadeSlide 0.35s var(--ease);
-  /* Glass background */
-  background: linear-gradient(
-    160deg,
-    color-mix(in srgb, var(--bg2) 95%, var(--accent) 5%) 0%,
-    var(--bg3) 100%
-  );
-  box-shadow: var(--shadow-card);
+  /* Ghibli paper layered background */
+  background:
+    linear-gradient(160deg,
+      color-mix(in srgb, var(--bg2) 88%, var(--accent) 12%) 0%,
+      var(--bg3) 100%
+    );
+  /* Subtle inner warm tint */
+  box-shadow: var(--shadow-card), inset 0 0 60px var(--card-tint, rgba(40,40,20,0.10));
   overflow: hidden;
   /* Animated border via --border-angle */
   animation: fadeSlide 0.35s var(--ease), rotateBorder 8s linear infinite;
@@ -2313,6 +2603,118 @@ main.story-active > #lengthFilterBar { display: none !important; }
   .sb-screen-header { gap: 12px; }
   .sb-screen-title-main { font-size: 1.1rem; }
 }
+
+/* ===================================================
+   GHIBLI AMBIENT EFFECTS
+   =================================================== */
+
+/* ── Floating particles (fireflies / dust motes) ── */
+.ghibli-particle {
+  position: fixed;
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  background: var(--accent2);
+  pointer-events: none;
+  z-index: 1;
+  animation: fireflyFloat var(--dur, 6s) ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+  opacity: 0;
+  box-shadow: 0 0 5px var(--accent), 0 0 10px rgba(var(--ar), 0.4);
+  filter: blur(0.5px);
+}
+
+/* ── Soft ink stroke decorative divider ── */
+.ink-divider {
+  height: 1px;
+  margin: 6px 0;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(var(--ar), 0.35) 30%,
+    rgba(var(--ar), 0.55) 50%,
+    rgba(var(--ar), 0.35) 70%,
+    transparent
+  );
+  position: relative;
+}
+.ink-divider::before {
+  content: '・';
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.5rem;
+  color: rgba(var(--ar), 0.55);
+  background: var(--bg);
+  padding: 0 4px;
+}
+
+/* ── Card hover: soft breath scale ── */
+.card:hover {
+  box-shadow: var(--shadow-glow), inset 0 0 80px var(--card-tint, rgba(40,40,20,0.12));
+  transform: translateY(-3px) scale(1.005);
+}
+
+/* ── Sidebar active button: brushstroke left accent ── */
+.sidebar-btn.active {
+  background: linear-gradient(90deg,
+    rgba(var(--ar), 0.16) 0%,
+    rgba(var(--ar), 0.05) 100%
+  );
+  color: var(--accent2);
+  border-color: rgba(var(--ar), 0.25);
+  /* Subtle texture overlay */
+  position: relative;
+}
+
+/* ── Progress bar: Ghibli spirit level ── */
+.progress-track {
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-fill {
+  border-radius: 3px;
+  box-shadow: 0 0 10px rgba(var(--ar), 0.55), 0 0 2px rgba(var(--ar), 0.8);
+}
+
+/* ── Flashcard image: rounded Ghibli frame ── */
+.card-image {
+  border-radius: var(--r-lg) !important;
+  box-shadow: 0 0 0 2px rgba(var(--ar), 0.20),
+              0 8px 32px rgba(0,0,0,0.55),
+              inset 0 0 0 1px rgba(255,255,255,0.06) !important;
+  transition: box-shadow 0.3s var(--ease), transform 0.3s var(--ease) !important;
+}
+.card-image:hover {
+  box-shadow: 0 0 0 2px rgba(var(--ar), 0.40),
+              0 12px 40px rgba(0,0,0,0.65),
+              0 0 28px rgba(var(--ar), 0.12) !important;
+  transform: scale(1.012) !important;
+}
+
+/* ── Button base: rounder, slightly taller ── */
+.btn {
+  border-radius: var(--r-md);
+  padding: 9px 17px;
+  letter-spacing: 0.08em;
+}
+
+/* ── Toast: warmer glass ── */
+.toast {
+  border-radius: var(--r-md) !important;
+  background: color-mix(in srgb, var(--bg3) 85%, transparent) !important;
+  backdrop-filter: blur(20px) saturate(1.5) !important;
+  border: 1px solid rgba(var(--ar), 0.22) !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(var(--ar), 0.10) !important;
+}
+
+/* ── Ghibli-style scrollbar ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--accent), rgba(var(--ar), 0.3));
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--accent2); }
 
 /* ===== LEGACY COMPAT ===== */
 header.header-hidden { transform: none !important; opacity: 1 !important; pointer-events: auto !important; }
