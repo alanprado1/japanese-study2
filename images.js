@@ -19,7 +19,8 @@
    LRU cap: 300 images.
    ============================================================ */
 
-var POLLINATIONS_KEY  = 'sk_qu92tw0tCoYDRIEZHLmNAgJ8j9phHCE9';
+// Get your key from enter.pollinations.ai (auth.pollinations.ai is shut down)
+var POLLINATIONS_KEY  = 'sk_myHegPimGvJoRbUh2xwUj1oyapGLZWEd';
 var MAX_CACHED_IMAGES = 300;
 
 // ─── shared IndexedDB promise ─────────────────────────────────
@@ -179,20 +180,21 @@ function _buildPrimaryUrl(sentence) {
   var size   = _imageSize();
   var prompt = 'Ghibli style: ' + (sentence.en || sentence.jp);
   var seed   = _seedFromId(sentence.id);
-  return 'https://image.pollinations.ai/prompt/' +
+  return 'https://gen.pollinations.ai/image/' +
     encodeURIComponent(prompt) +
     '?model=flux&width=' + size.w + '&height=' + size.h +
-    '&seed=' + seed + '&nologo=true&enhance=true&token=' + POLLINATIONS_KEY;
+    '&seed=' + seed + '&enhance=true&key=' + POLLINATIONS_KEY;
 }
 
 function _buildFallbackUrl(sentence) {
   var size   = _imageSize();
   var prompt = 'Ghibli style: ' + (sentence.en || sentence.jp);
   var seed   = _seedFromId(sentence.id);
+  // Fallback: no key — anonymous tier, rate-limited but always available
   return 'https://gen.pollinations.ai/image/' +
     encodeURIComponent(prompt) +
     '?model=flux&width=' + size.w + '&height=' + size.h +
-    '&seed=' + seed + '&enhance=true&key=' + POLLINATIONS_KEY;
+    '&seed=' + seed + '&enhance=true';
 }
 
 // ─── placeholder helpers ──────────────────────────────────────

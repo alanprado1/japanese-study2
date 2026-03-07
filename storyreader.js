@@ -24,6 +24,35 @@ var _srSwipeStartY = 0;
 var _srSwipeDir    = null;   // 'h' | 'v' | null
 var _srSwipeWired  = false;  // prevent double-wiring
 
+// ─── Page reflow ──────────────────────────────────────────────
+// charsPerPage setting → max cells per reader page:
+//   short  (≤80)  → 2 cells
+//   medium (≤120) → 3 cells
+//   long   (≥200) → 5 cells
+// totalPages tells Gemini how much to write; reader pages are derived here.
+var _srPages   = null;
+var _srPagesId = null;
+
+function _srMaxCells(story) {
+  var c = story && story.settings && story.settings.charsPerPage;
+  if (!c || c >= 200) return 5;
+  if (c >= 120)       return 3;
+  return 2;
+}
+
+function _srBuildPages(story) {
+  var max  = _srMaxCells(story);
+  var out  = [];
+  for (var pi = 0; pi < story.pages.length; pi++) {
+    var segs  = story.pages[pi].segments || [];
+    var cells = _srSliceCells(segs);
+    for (var ci = 0; ci < cells.length; ci += max) {
+      out.push({ cells: cells.slice(ci, ci + max), srcPageIdx: pi });
+    }
+  }
+  return out.length ? out : null;
+}
+
 // ─── Open the reader ──────────────────────────────────────────
 function openStoryReader(story) {
   if (!story || !story.pages || !story.pages.length) return;
@@ -32,9 +61,37 @@ function openStoryReader(story) {
   currentPageIdx = 0;
   _srStopAudio();
 
+  // Build cell-capped pages once per story
+  if (_srPagesId !== story.id) {
+    _srPages   = _srBuildPages(story);
+    _srPagesId = story.id;
+  }
+
   var overlay = document.getElementById('storyReaderOverlay');
   if (!overlay) return;
   overlay.style.display = 'flex';
+
+  // Pre-fetch page 0 background before render so it arrives ASAP
+  var _p0key = story.id + '_p0';
+  if (typeof _imgCache === 'undefined' || !_imgCache[_p0key]) {
+    var _applyP0 = function(dataUrl) {
+      var ov = document.getElementById('storyReaderOverlay');
+      if (ov && ov.getAttribute('data-sr-bg-key') === _p0key) {
+        ov.style.backgroundImage = 'url(' + dataUrl + ')';
+        ov.classList.add('sr-has-bg');
+      }
+    };
+    var _fetchP0 = function() { _srBgFetch(_p0key, _srBuildPrompt(story, 0), _applyP0); };
+    if (typeof _idbGet === 'function') {
+      _idbGet(_p0key).then(function(rec) {
+        if (rec) {
+          var url = typeof rec === 'string' ? rec : (rec && rec.dataUrl);
+          if (url) { if (typeof _imgCache !== 'undefined') _imgCache[_p0key] = url; _applyP0(url); return; }
+        }
+        _fetchP0();
+      }).catch(_fetchP0);
+    } else { _fetchP0(); }
+  }
 
   _srRenderPage();
 
@@ -50,6 +107,8 @@ function closeStoryReader() {
   _srUnmountFontControls();
   currentStory   = null;
   currentPageIdx = 0;
+  _srPages       = null;
+  _srPagesId     = null;
   var overlay = document.getElementById('storyReaderOverlay');
   if (overlay) overlay.style.display = 'none';
 }
@@ -57,7 +116,7 @@ function closeStoryReader() {
 // ─── Navigate pages ───────────────────────────────────────────
 function _srGoTo(idx) {
   if (!currentStory) return;
-  var total = currentStory.pages.length;
+  var total = _srPages ? _srPages.length : currentStory.pages.length;
   if (idx < 0 || idx >= total) return;
   _srStopAudio();
   currentPageIdx = idx;
@@ -79,14 +138,25 @@ function _srRenderPage() {
 
   var story    = currentStory;
   var pageIdx  = currentPageIdx;
-  var page     = story.pages[pageIdx];
-  var total    = story.pages.length;
-  var segments = page ? page.segments : [];
+
+  // Use reflowed pages if available
+  var rPage    = _srPages ? _srPages[pageIdx] : null;
+  var total    = _srPages ? _srPages.length : story.pages.length;
+  var bgIdx    = rPage ? rPage.srcPageIdx : pageIdx;
+  var cells    = rPage ? rPage.cells : null;
+
+  // Fallback: raw page segments → slice on the fly
+  if (!cells) {
+    var rawPage  = story.pages[pageIdx];
+    var segments = rawPage ? rawPage.segments : [];
+    cells = _srSliceCells(segments);
+  }
+
   var isFirst  = pageIdx === 0;
   var isLast   = pageIdx === total - 1;
 
   // ── Background image ───────────────────────────────────────
-  _srSetBackground(overlay, story, pageIdx);
+  _srSetBackground(overlay, story, bgIdx);
 
   // ── Title block — page 0 only ──────────────────────────────
   var titleHTML = '';
@@ -108,11 +178,7 @@ function _srRenderPage() {
       '<button class="sr-nav-btn" onclick="_srGoTo(' + (pageIdx + 1) + ')"' + nextDis + '>Next →</button>' +
     '</div>';
 
-  // ── Story cells — sliced into ~15-char audio chunks ──────────
-  // _srSliceCells() annotates each char as anchor|filler, then slices
-  // at Japanese punctuation boundaries into cells of ~15 chars each.
-  // Order is preserved exactly from Gemini's narrative sequence.
-  var cells = _srSliceCells(segments);
+  // ── Story cells ────────────────────────────────────────────
   var bodyHTML = '<div class="sr-story-body">';
   for (var i = 0; i < cells.length; i++) {
     bodyHTML += _srRenderCell(cells[i]);
@@ -193,13 +259,10 @@ function _srRenderPage() {
     _srFetchFillerTranslations();
   }
 
-  // ── Prefetch this page's audio so Play button responds instantly ───
-  // prefetchJP() (tts.js) fetches + caches the audio in background.
-  // By the time user clicks Play, the cache hit makes playback immediate.
-  // Only runs for Google provider (ElevenLabs charges per character).
-  if (page && typeof prefetchJP === 'function') {
-    var _prefetchText = page.segments
-      .map(function(s) { return s.text.trim(); })
+  // ── Prefetch this page's audio ─────────────────────────────
+  if (typeof prefetchJP === 'function') {
+    var _prefetchText = cells
+      .map(function(c) { return c.text.trim(); })
       .filter(function(t) { return t.length > 0; })
       .join('\u3002');
     if (_prefetchText) prefetchJP(_prefetchText);
@@ -209,7 +272,9 @@ function _srRenderPage() {
   // Starts fetching page N+1's illustration in the background so it's
   // ready in _imgCache when the user navigates — no waiting at all.
   if (!isLast) {
-    _srPrefetchBackground(story, pageIdx + 1);
+    var nextRPage = _srPages ? _srPages[pageIdx + 1] : null;
+    var nextBgIdx = nextRPage ? nextRPage.srcPageIdx : pageIdx + 1;
+    _srPrefetchBackground(story, nextBgIdx);
   }
 }
 
@@ -418,10 +483,10 @@ function _srBgPrimaryUrl(idbKey, prompt) {
   var seed = (typeof _seedFromId === 'function') ? _seedFromId(idbKey)
     : Math.abs(idbKey.split('').reduce(function(h,c){return((h<<5)-h)+c.charCodeAt(0)|0;},0)) % 100000;
   var key = (typeof POLLINATIONS_KEY !== 'undefined') ? POLLINATIONS_KEY : '';
-  return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) +
+  return 'https://gen.pollinations.ai/image/' + encodeURIComponent(prompt) +
     '?model=flux&width=' + _srBgDim(window.innerWidth) +
     '&height=' + _srBgDim(window.innerHeight) +
-    '&seed=' + seed + '&nologo=true&enhance=true&token=' + key;
+    '&seed=' + seed + '&enhance=true&key=' + key;
 }
 
 function _srBgFallbackUrl(idbKey, prompt) {
@@ -734,22 +799,18 @@ function _srTogglePageAudio(btn) {
   if (!btn) btn = document.getElementById('srPageAudioBtn');
   if (!btn || !currentStory || typeof speakJP !== 'function') return;
 
-  var page = currentStory.pages[currentPageIdx];
-  if (!page || !page.segments.length) return;
+  var pageCells = _srPages
+    ? (_srPages[currentPageIdx] ? _srPages[currentPageIdx].cells : [])
+    : _srSliceCells((currentStory.pages[currentPageIdx] || {}).segments || []);
 
-  // Concatenate segments. 。between them gives a natural TTS pause.
-  var allText = page.segments
-    .map(function(s) { return s.text.trim(); })
+  if (!pageCells.length) return;
+
+  var allText = pageCells
+    .map(function(c) { return c.text.trim(); })
     .filter(function(t) { return t.length > 0; })
     .join('\u3002');
 
   if (!allText) return;
-
-  // speakJP with the button element:
-  //  - 1st click while idle    → plays,   btn shows pause icon
-  //  - 2nd click while playing → pauses,  btn shows ▶
-  //  - 3rd click while paused  → resumes, btn shows pause icon
-  //  - audio ends naturally    → btn shows ▶
   speakJP(allText, btn).catch(function() {});
 }
 
