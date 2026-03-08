@@ -32,11 +32,27 @@ function applyViewState() {
 }
 
 // ─── themes ──────────────────────────────────────────────────
+var THEME_NAMES = {
+  'default':    'Totoro Forest',
+  'bathhouse':  'Bath House',
+  'laputa':     'Laputa Sky',
+  'mononoke':   'Mononoke Forest',
+  'howl':       "Howl's Castle",
+  'nausicaa':   'Nausicaä Valley',
+  'totoro-day': 'Totoro Day',
+  'midnight':   'Midnight Blue',
+  'matcha':     'Matcha Green',
+  'ember':      'Ember Orange',
+  'light':      'Parchment Light'
+};
+
 function setTheme(t) {
   document.body.setAttribute('data-theme', t);
   document.querySelectorAll('.theme-dot').forEach(function(d) {
     d.classList.toggle('active', d.dataset.t === t);
   });
+  var nameEl = document.getElementById('themeNameDisplay');
+  if (nameEl) nameEl.textContent = THEME_NAMES[t] || t;
   try { localStorage.setItem('jpStudy_theme', t); } catch(e) {}
 }
 
@@ -49,7 +65,9 @@ document.getElementById('btnToggleTranslation').addEventListener('click', functi
   showTranslation = !showTranslation;
   var btn = document.getElementById('btnToggleTranslation');
   btn.classList.toggle('active', showTranslation);
-  btn.textContent = showTranslation ? 'Translation ON' : 'Translation OFF';
+  // Update sidebar state badge
+  var badge = document.getElementById('translationState');
+  if (badge) { badge.textContent = showTranslation ? 'ON' : 'OFF'; badge.classList.toggle('active', showTranslation); }
   try { localStorage.setItem('jpStudy_translation', showTranslation); } catch(e) {}
   collapseNavOnMobile();
   render();
@@ -60,7 +78,9 @@ document.getElementById('btnToggleFurigana').addEventListener('click', function(
   showFurigana = !showFurigana;
   var btn = document.getElementById('btnToggleFurigana');
   btn.classList.toggle('active', showFurigana);
-  btn.textContent = showFurigana ? '振仮名 ON' : '振仮名 OFF';
+  // Update sidebar state badge
+  var badge = document.getElementById('furiganaState');
+  if (badge) { badge.textContent = showFurigana ? 'ON' : 'OFF'; badge.classList.toggle('active', showFurigana); }
   try { localStorage.setItem('jpStudy_furigana', showFurigana); } catch(e) {}
   collapseNavOnMobile();
   render();
@@ -68,8 +88,8 @@ document.getElementById('btnToggleFurigana').addEventListener('click', function(
 
 // ─── helper: collapse nav on mobile when switching modes ─────
 function collapseNavOnMobile() {
-  if (window.innerWidth <= 768) {
-    document.querySelector('header').classList.add('header-hidden');
+  if (window.innerWidth <= 768 && typeof closeSidebar === 'function') {
+    closeSidebar();
   }
 }
 
@@ -231,13 +251,18 @@ document.addEventListener('keydown', function(e) {
 function loadUIPrefs() {
   var t = localStorage.getItem('jpStudy_theme');
   if (t) setTheme(t);
+  else {
+    var nameEl = document.getElementById('themeNameDisplay');
+    if (nameEl) nameEl.textContent = THEME_NAMES['default'];
+  }
 
   var f = localStorage.getItem('jpStudy_furigana');
   if (f === 'true') {
     showFurigana = true;
     var fb = document.getElementById('btnToggleFurigana');
     fb.classList.add('active');
-    fb.textContent = '振仮名 ON';
+    var fbadge = document.getElementById('furiganaState');
+    if (fbadge) { fbadge.textContent = 'ON'; fbadge.classList.add('active'); }
   }
 
   var tr = localStorage.getItem('jpStudy_translation');
@@ -245,7 +270,8 @@ function loadUIPrefs() {
     showTranslation = (tr === 'true');
     var tb = document.getElementById('btnToggleTranslation');
     tb.classList.toggle('active', showTranslation);
-    tb.textContent = showTranslation ? 'Translation ON' : 'Translation OFF';
+    var tbadge = document.getElementById('translationState');
+    if (tbadge) { tbadge.textContent = showTranslation ? 'ON' : 'OFF'; tbadge.classList.toggle('active', showTranslation); }
   }
 
   var sz = localStorage.getItem('jpStudy_jpSize');
@@ -253,12 +279,6 @@ function loadUIPrefs() {
     document.documentElement.style.setProperty('--jp-size', sz);
     document.getElementById('fontSizeSlider').value = parseFloat(sz);
     document.getElementById('fontSizeVal').textContent = sz;
-  }
-
-  // Restore story reader font size independently (uses separate CSS var --sr-jp-size)
-  var srSz = localStorage.getItem('jpStudy_srJpSize');
-  if (srSz) {
-    document.documentElement.style.setProperty('--sr-jp-size', srSz);
   }
 
   var wt = localStorage.getItem('jpStudy_jpWeight');
@@ -278,9 +298,10 @@ function loadUIPrefs() {
   if (lf !== null && lf !== '') currentLengthFilter = lf;
 }
 
-// ─── mobile: nav toggle pill ─────────────────────────────────
-// Header starts visible. Only the pill button toggles it.
-document.getElementById('btnMobileNav').addEventListener('click', function() {
-  var headerEl = document.querySelector('header');
-  headerEl.classList.toggle('header-hidden');
-});
+// ─── mobile: hamburger (handled by inline script in index.html) ──
+// btnMobileNav click → openSidebar()/closeSidebar() via inline script.
+// Keeping a no-op listener here so nothing breaks if ui.js runs first.
+var _mobileNavBtn = document.getElementById('btnMobileNav');
+if (_mobileNavBtn && !_mobileNavBtn._sidebarBound) {
+  _mobileNavBtn._sidebarBound = true; // prevents double-binding
+}
